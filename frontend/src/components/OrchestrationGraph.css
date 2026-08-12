@@ -1,0 +1,145 @@
+/* ============================================================
+   OrchestrationGraph.css
+   Styles for the SVG pipeline visualization
+   ============================================================ */
+
+.ograph-wrapper {
+  width: 100%;
+  background: #0f172a;
+  border-radius: 12px;
+  padding: 8px 0;
+  overflow: visible;
+}
+
+.ograph-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+/* ── Node base ── */
+.ograph-node-circle {
+  transition: fill 0.3s ease, stroke 0.3s ease;
+}
+
+.ograph-node-label {
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-size: 11px;
+  fill: #94a3b8;
+  text-anchor: middle;
+  pointer-events: none;
+  transition: fill 0.3s ease;
+  user-select: none;
+}
+
+.ograph-node-label--running {
+  fill: #f59e0b;
+}
+
+.ograph-node-label--complete {
+  fill: #22c55e;
+}
+
+.ograph-node-label--failed {
+  fill: #ef4444;
+}
+
+/* ── Checkmark inside completed node ── */
+.ograph-checkmark {
+  stroke: #fff;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.ograph-checkmark--visible {
+  opacity: 1;
+}
+
+/* ── Pulse ring around running node ── */
+.ograph-pulse-ring {
+  fill: none;
+  stroke-width: 3;
+  opacity: 0;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+.ograph-pulse-ring--active {
+  opacity: 1;
+  animation: ograph-pulse 1s ease-in-out infinite;
+}
+
+@keyframes ograph-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  60% {
+    transform: scale(1.35);
+    opacity: 0.25;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+/* ── Edges ── */
+.ograph-edge {
+  fill: none;
+  stroke-width: 1.5;
+  stroke: #374151;
+  stroke-dasharray: 6 4;
+  transition: stroke 0.3s ease, stroke-width 0.3s ease;
+}
+
+.ograph-edge--active {
+  stroke: #7c3aed;
+  stroke-width: 2;
+  stroke-dasharray: 8 6;
+  animation: ograph-flow 0.8s linear infinite;
+}
+
+.ograph-edge--complete {
+  stroke: #22c55e;
+  stroke-dasharray: none;
+  stroke-width: 2;
+  animation: none;
+}
+
+@keyframes ograph-flow {
+  from {
+    stroke-dashoffset: 56;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* ── Stage label pills ── */
+.ograph-stage-label {
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-size: 9px;
+  fill: #475569;
+  text-anchor: middle;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+/* ── Arrowhead marker paths ── */
+.ograph-arrow-idle {
+  fill: #374151;
+  transition: fill 0.3s ease;
+}
+.ograph-arrow-active {
+  fill: #7c3aed;
+}
+.ograph-arrow-complete {
+  fill: #22c55e;
+}

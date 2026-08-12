@@ -1,0 +1,222 @@
+{
+  "_comment": "Static expected-outcome fixture for the API Database Connection Failure demo scenario. Used by QA tests to validate agent output determinism.",
+  "schema_version": "1.0",
+  "scenario": {
+    "id": "api-db-connection-failure",
+    "title": "API Database Connection Failure",
+    "description": "api-gateway is returning 503 errors. Database connection pool exhausted. 847 requests failed in the last 5 minutes.",
+    "severity": "CRITICAL",
+    "log_count": 20,
+    "log_levels_present": ["INFO", "WARN", "ERROR", "CRITICAL"],
+    "infra_state_keys": ["pods", "persistent_volumes", "nodes", "services", "error_budget"],
+    "repo_context_keys": ["relevant_files", "total_files", "repo", "commit"]
+  },
+  "expected_agents": {
+    "Log Scout": {
+      "status": "COMPLETE",
+      "findings_count_min": 2,
+      "findings": [
+        "ERROR: Connection refused to postgres:5432",
+        "Retry attempts: 5/5 failed — giving up",
+        "847 failed API requests in the last 15 minutes"
+      ],
+      "evidence_keys": [
+        "log_lines_analyzed",
+        "error_count",
+        "critical_pattern",
+        "first_error_ts",
+        "last_error_ts"
+      ],
+      "evidence": {
+        "log_lines_analyzed": 1247,
+        "error_count": 847,
+        "critical_pattern": "connection_refused"
+      }
+    },
+    "Code Hunter": {
+      "status": "COMPLETE",
+      "findings_count_min": 2,
+      "findings": [
+        "db_pool.connect() called without timeout parameter",
+        "No circuit breaker pattern implemented around DB calls",
+        "Connection pool size hardcoded to 10 — insufficient for load"
+      ],
+      "evidence_keys": [
+        "files_scanned",
+        "severity",
+        "affected_files",
+        "rule_hits"
+      ],
+      "evidence": {
+        "files_scanned": 47,
+        "severity": "high",
+        "affected_files": [
+          "src/db/pool.py",
+          "src/db/connection.py",
+          "src/api/routes.py"
+        ],
+        "rule_hits": {
+          "missing_timeout": 12,
+          "no_circuit_breaker": 1,
+          "hardcoded_pool_size": 1
+        }
+      }
+    },
+    "Infra Scout": {
+      "status": "COMPLETE",
+      "findings_count_min": 2,
+      "findings": [
+        "postgres-0 pod is in CrashLoopBackOff — 15 restarts recorded",
+        "Persistent Volume Claim disk usage at 98% (9.8Gi / 10Gi)"
+      ],
+      "evidence_keys": [
+        "pod_status",
+        "pod_restarts",
+        "disk_usage_pct",
+        "disk_used_gi",
+        "disk_capacity_gi",
+        "node_cpu_pct",
+        "node_mem_pct"
+      ],
+      "evidence": {
+        "pod_status": "CrashLoopBackOff",
+        "pod_restarts": 15,
+        "disk_usage_pct": 98,
+        "disk_used_gi": 9.8,
+        "disk_capacity_gi": 10,
+        "node_cpu_pct": 34,
+        "node_mem_pct": 61
+      }
+    },
+    "Security Scout": {
+      "status": "COMPLETE",
+      "findings_count_min": 1,
+      "findings": [
+        "No anomalous auth patterns",
+        "DB credentials valid"
+      ],
+      "evidence_keys": [
+        "auth_events_checked",
+        "suspicious_ips"
+      ],
+      "evidence": {
+        "auth_events_checked": 320,
+        "suspicious_ips": 0
+      }
+    },
+    "Root Cause": {
+      "status": "COMPLETE",
+      "findings_count_min": 2,
+      "findings_contain": [
+        "disk exhaustion",
+        "connection pool"
+      ],
+      "evidence_keys": [
+        "confidence",
+        "root_cause_summary",
+        "triggers",
+        "correlated_agents"
+      ],
+      "evidence": {
+        "confidence": 0.97,
+        "triggers": {
+          "disk_exhaustion": true,
+          "pod_crash_loop": true,
+          "connection_refused": true
+        },
+        "correlated_agents": ["Log Scout", "Infra Scout", "Code Hunter"]
+      }
+    },
+    "Fix": {
+      "status": "COMPLETE",
+      "findings_count_min": 5,
+      "findings_contain": [
+        "vacuumdb",
+        "PVC",
+        "rollout restart",
+        "DB_POOL_SIZE"
+      ],
+      "evidence_keys": [
+        "step_count",
+        "risk",
+        "estimated_minutes",
+        "reversible",
+        "commands",
+        "config_changes"
+      ],
+      "evidence": {
+        "step_count": 5,
+        "risk": "low",
+        "estimated_minutes": 5,
+        "reversible": true,
+        "config_changes": {
+          "DB_POOL_SIZE": { "from": 10, "to": 50 },
+          "DB_POOL_TIMEOUT": { "from": null, "to": 30 }
+        }
+      }
+    },
+    "Verification": {
+      "status": "COMPLETE",
+      "findings_count_min": 4,
+      "findings_contain": [
+        "PASS",
+        "200 OK",
+        "0.00%"
+      ],
+      "evidence_keys": [
+        "verdict",
+        "api_health",
+        "db_connections",
+        "error_rate",
+        "postgres_pod",
+        "disk_usage_pct"
+      ],
+      "evidence": {
+        "verdict": "PASS",
+        "api_health": "200 OK",
+        "db_connections": "45/100 active",
+        "error_rate": "0.00%",
+        "postgres_pod": "Running",
+        "disk_usage_pct": 61,
+        "checks_run": 5,
+        "checks_passed": 5
+      }
+    }
+  },
+  "expected_root_cause_contains": "disk exhaustion",
+  "expected_root_cause_full": "PostgreSQL pod crashed due to disk exhaustion (98% PVC utilisation), triggering connection pool exhaustion and 847 API failures.",
+  "expected_fix_steps": [
+    "Step 1 — Reclaim disk space: kubectl exec postgres-0 -- vacuumdb --all --analyze",
+    "Step 2 — Expand PVC: kubectl patch pvc postgres-pvc -p '{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"50Gi\"}}}}'",
+    "Step 3 — Restart StatefulSet: kubectl rollout restart statefulset/postgres",
+    "Step 4 — Increase connection pool: set DB_POOL_SIZE=50 in app config",
+    "Step 5 — Add pool timeout: set DB_POOL_TIMEOUT=30 in app config"
+  ],
+  "expected_verification": {
+    "verified": true,
+    "verdict": "PASS",
+    "checks": {
+      "api_health": "200 OK",
+      "db_connections": "45/100 active",
+      "error_rate": "0.00%",
+      "postgres_pod": "Running",
+      "disk_usage_pct": 61
+    }
+  },
+  "expected_investigation": {
+    "status": "COMPLETE",
+    "agents_complete": [
+      "Log Scout",
+      "Code Hunter",
+      "Infra Scout",
+      "Security Scout",
+      "Root Cause",
+      "Fix",
+      "Verification"
+    ],
+    "root_cause_not_null": true,
+    "proposed_fix_not_null": true,
+    "verification_result_not_null": true,
+    "timeline_events_min": 10
+  }
+}
