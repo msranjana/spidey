@@ -12,11 +12,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import './App.css';
 import OrchestrationGraph from './components/OrchestrationGraph';
-import { AgentStatus } from './types';
-import type {
-  AgentUpdatePayload,
-  InvestigationUpdatePayload,
-  CompletePayload,
+import {
+  AgentStatus,
+  type AgentUpdatePayload,
+  type InvestigationUpdatePayload,
+  type CompletePayload,
 } from './types';
 
 // ─────────────────────────────────────────────
@@ -72,7 +72,9 @@ function investigationStatusLabel(status: string): string {
 }
 
 function statusDotClass(status: string): string {
-  if (status === 'RUNNING' || status === 'root_cause' || status === 'fix_proposed') return 'status-dot status-dot--running';
+  if (status === 'RUNNING' || status === 'root_cause' || status === 'fix_proposed') {
+    return 'status-dot status-dot--running';
+  }
   if (status === 'COMPLETE') return 'status-dot status-dot--complete';
   if (status === 'FAILED')   return 'status-dot status-dot--failed';
   return 'status-dot';
@@ -88,7 +90,14 @@ interface AgentCardProps {
 }
 
 function AgentCard({ name, info }: AgentCardProps) {
-  const statusLower = info.status.toLowerCase() as Lowercase<AgentStatus>;
+  const statusLower = info.status.toLowerCase();
+
+  function idleText(): string {
+    if (info.status === AgentStatus.IDLE)    return 'Waiting to start…';
+    if (info.status === AgentStatus.RUNNING) return 'Investigating…';
+    return 'No findings';
+  }
+
   return (
     <div className={`agent-card agent-card--${statusLower}`} role="article" aria-label={name}>
       <div className="agent-card__header">
@@ -106,9 +115,7 @@ function AgentCard({ name, info }: AgentCardProps) {
             <div key={i} className="agent-card__finding">{f}</div>
           ))
         ) : (
-          <span className="agent-card__idle-text">
-            {info.status === 'IDLE' ? 'Waiting to start…' : info.status === 'RUNNING' ? 'Investigating…' : 'No findings'}
-          </span>
+          <span className="agent-card__idle-text">{idleText()}</span>
         )}
       </div>
     </div>
@@ -120,12 +127,14 @@ function AgentCard({ name, info }: AgentCardProps) {
 // ─────────────────────────────────────────────
 
 export default function App() {
-  const [investigationId, setInvestigationId]     = useState<string | null>(null);
+  const [investigationId, setInvestigationId]         = useState<string | null>(null);
   const [investigationStatus, setInvestigationStatus] = useState<string>('');
-  const [agents, setAgents]                       = useState<Record<string, AgentInfo>>(initialAgents());
-  const [results, setResults]                     = useState<ResultsState>({ rootCause: null, proposedFix: null, verificationResult: null });
-  const [isStarting, setIsStarting]               = useState(false);
-  const [error, setError]                         = useState<string | null>(null);
+  const [agents, setAgents]                           = useState<Record<string, AgentInfo>>(initialAgents());
+  const [results, setResults]                         = useState<ResultsState>({
+    rootCause: null, proposedFix: null, verificationResult: null,
+  });
+  const [isStarting, setIsStarting] = useState(false);
+  const [error, setError]           = useState<string | null>(null);
   const esRef = useRef<EventSource | null>(null);
 
   // Derived: is a run active?
@@ -142,8 +151,8 @@ export default function App() {
     const es = new EventSource(`/api/investigations/${invId}/stream`);
     esRef.current = es;
 
-    es.onmessage = (evt) => {
-      if (!evt.data || evt.data.startsWith(':')) return; // comment line
+    es.onmessage = (evt: MessageEvent<string>) => {
+      if (!evt.data || evt.data.startsWith(':')) return;
       let parsed: { type: string; data: unknown };
       try {
         parsed = JSON.parse(evt.data) as { type: string; data: unknown };
@@ -163,15 +172,9 @@ export default function App() {
       } else if (parsed.type === 'investigation_update') {
         const d = parsed.data as InvestigationUpdatePayload;
         setInvestigationStatus(d.status);
-        if (d.root_cause) {
-          setResults(prev => ({ ...prev, rootCause: d.root_cause! }));
-        }
-        if (d.proposed_fix) {
-          setResults(prev => ({ ...prev, proposedFix: d.proposed_fix! }));
-        }
-        if (d.verification_result) {
-          setResults(prev => ({ ...prev, verificationResult: d.verification_result! }));
-        }
+        if (d.root_cause)           setResults(prev => ({ ...prev, rootCause: d.root_cause!          }));
+        if (d.proposed_fix)         setResults(prev => ({ ...prev, proposedFix: d.proposed_fix!      }));
+        if (d.verification_result)  setResults(prev => ({ ...prev, verificationResult: d.verification_result! }));
       } else if (parsed.type === 'complete') {
         const d = parsed.data as CompletePayload;
         setInvestigationStatus('COMPLETE');
@@ -184,10 +187,7 @@ export default function App() {
       }
     };
 
-    es.onerror = () => {
-      // Stream ended or error — close silently
-      es.close();
-    };
+    es.onerror = () => { es.close(); };
   }, []);
 
   // Cleanup on unmount
@@ -197,11 +197,9 @@ export default function App() {
 
   // ── Run Demo ─────────────────────────────────
 
-  const handleRunDemo = async () => {
+  const handleRunDemo = useCallback(async () => {
     setError(null);
     setIsStarting(true);
-
-    // Reset state
     setAgents(initialAgents());
     setResults({ rootCause: null, proposedFix: null, verificationResult: null });
     setInvestigationStatus('PENDING');
@@ -212,9 +210,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: 'API Database Connection Failure' }),
       });
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       const json = (await res.json()) as { investigation_id: string; status: string };
       setInvestigationId(json.investigation_id);
       setInvestigationStatus(json.status);
@@ -225,11 +221,11 @@ export default function App() {
     } finally {
       setIsStarting(false);
     }
-  };
+  }, [connectSSE]);
 
-  // ── Re-run demo (already have inv ID) ────────
+  // ── Re-run demo ───────────────────────────────
 
-  const handleRerun = async () => {
+  const handleRerun = useCallback(async () => {
     if (!investigationId) { await handleRunDemo(); return; }
     setError(null);
     setAgents(initialAgents());
@@ -247,7 +243,7 @@ export default function App() {
     } finally {
       setIsStarting(false);
     }
-  };
+  }, [investigationId, connectSSE, handleRunDemo]);
 
   // ── Derived: agentStates map for graph ───────
 
@@ -256,8 +252,19 @@ export default function App() {
     agentStates[name] = info.status;
   }
 
-  const isResolved = investigationStatus === 'COMPLETE';
+  const isResolved  = investigationStatus === 'COMPLETE';
+  const neverRun    = investigationStatus === '';
   const statusLabel = investigationStatusLabel(investigationStatus);
+
+  // Determine which button action to use
+  const handleButtonClick = neverRun || isResolved || investigationStatus === 'FAILED'
+    ? handleRunDemo
+    : handleRerun;
+
+  const buttonLabel = isStarting ? '⏳ Starting…'
+    : isActive   ? '⚡ Running…'
+    : isResolved ? '🔄 Run Again'
+    : '▶ Run Demo';
 
   // ─────────────────────────────────────────────
   // Render
@@ -279,11 +286,11 @@ export default function App() {
         <div className="control-bar">
           <button
             className="btn-run"
-            onClick={investigationStatus === '' || isResolved || investigationStatus === 'FAILED' ? handleRunDemo : handleRerun}
+            onClick={handleButtonClick}
             disabled={isActive || isStarting}
             aria-busy={isActive}
           >
-            {isStarting ? '⏳ Starting…' : isActive ? '⚡ Running…' : isResolved ? '🔄 Run Again' : '▶ Run Demo'}
+            {buttonLabel}
           </button>
 
           {statusLabel && (
@@ -361,7 +368,7 @@ export default function App() {
         )}
 
         {/* Empty state before first run */}
-        {investigationStatus === '' && (
+        {neverRun && (
           <div className="empty-state">
             Click <strong>Run Demo</strong> to start the agentic investigation pipeline.
           </div>
