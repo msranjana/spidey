@@ -1,0 +1,584 @@
+/* ─── Reset & Base ─────────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  /* Palette */
+  --bg-body:     #0a0a0f;
+  --bg-card:     #12121a;
+  --bg-card-alt: #161620;
+  --border:      #1e1e2e;
+  --text:        #e2e2f0;
+  --text-muted:  #6b7280;
+  --text-dim:    #9ca3af;
+
+  /* Accents */
+  --primary:     #7c3aed;
+  --primary-dim: #5b21b6;
+  --success:     #22c55e;
+  --warning:     #f59e0b;
+  --danger:      #ef4444;
+
+  /* Agent status */
+  --status-idle:     #374151;
+  --status-running:  #f59e0b;
+  --status-complete: #22c55e;
+  --status-failed:   #ef4444;
+
+  /* Layout */
+  --radius:     12px;
+  --radius-sm:  6px;
+  --shadow:     0 4px 24px rgba(0, 0, 0, 0.4);
+  --shadow-sm:  0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+html, body {
+  background: var(--bg-body);
+  color: var(--text);
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* ─── Animations ────────────────────────────────────────────────────────────── */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.45; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; max-height: 0; }
+  to   { opacity: 1; max-height: 1000px; }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+/* ─── Layout ────────────────────────────────────────────────────────────────── */
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px 64px;
+}
+
+/* ─── Header ────────────────────────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 28px 0 20px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 32px;
+}
+
+.header-logo {
+  font-size: 2.8rem;
+  line-height: 1;
+  filter: drop-shadow(0 0 12px rgba(124, 58, 237, 0.6));
+}
+
+.header-title {
+  font-size: 1.9rem;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  background: linear-gradient(135deg, #a78bfa, #7c3aed);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.header-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+/* ─── Cards ─────────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 24px;
+  margin-bottom: 24px;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.card-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.card-subtitle {
+  font-size: 0.875rem;
+  color: var(--text-dim);
+  margin-bottom: 16px;
+}
+
+/* ─── Incident Panel ─────────────────────────────────────────────────────────── */
+.incident-panel {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.incident-info {
+  flex: 1;
+}
+
+.incident-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.incident-description {
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  max-width: 560px;
+}
+
+.incident-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+/* ─── Badges ─────────────────────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.badge-critical {
+  background: rgba(239, 68, 68, 0.18);
+  color: var(--danger);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.badge-idle {
+  background: rgba(55, 65, 81, 0.4);
+  color: var(--text-muted);
+  border: 1px solid rgba(55, 65, 81, 0.6);
+}
+
+.badge-running {
+  background: rgba(245, 158, 11, 0.18);
+  color: var(--warning);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.badge-complete {
+  background: rgba(34, 197, 94, 0.18);
+  color: var(--success);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+}
+
+.badge-failed {
+  background: rgba(239, 68, 68, 0.18);
+  color: var(--danger);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.badge-investigating {
+  background: rgba(124, 58, 237, 0.18);
+  color: #a78bfa;
+  border: 1px solid rgba(124, 58, 237, 0.35);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.badge-resolved {
+  background: rgba(34, 197, 94, 0.18);
+  color: var(--success);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+}
+
+/* ─── Buttons ─────────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  border-radius: var(--radius-sm);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.15s, transform 0.1s;
+  white-space: nowrap;
+}
+
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 0 20px rgba(124, 58, 237, 0.35);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #6d28d9;
+  box-shadow: 0 0 28px rgba(124, 58, 237, 0.5);
+}
+
+/* ─── Spinner ─────────────────────────────────────────────────────────────────── */
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(245, 158, 11, 0.3);
+  border-top-color: var(--warning);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* ─── Agent Grid ─────────────────────────────────────────────────────────────── */
+.section-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.agent-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.agent-grid-bottom {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 900px) {
+  .agent-grid        { grid-template-columns: repeat(2, 1fr); }
+  .agent-grid-bottom { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 560px) {
+  .agent-grid        { grid-template-columns: 1fr; }
+  .agent-grid-bottom { grid-template-columns: 1fr; }
+}
+
+/* ─── Agent Card ─────────────────────────────────────────────────────────────── */
+.agent-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  animation: fadeIn 0.35s ease-out;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.agent-card.running {
+  border-color: rgba(245, 158, 11, 0.4);
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.12);
+}
+
+.agent-card.complete {
+  border-color: rgba(34, 197, 94, 0.35);
+  box-shadow: 0 0 16px rgba(34, 197, 94, 0.08);
+}
+
+.agent-card.failed {
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.agent-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.agent-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.agent-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  flex: 1;
+}
+
+.agent-findings {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.finding-item {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  padding: 4px 8px;
+  background: rgba(255,255,255,0.04);
+  border-left: 2px solid var(--primary-dim);
+  border-radius: 0 4px 4px 0;
+  line-height: 1.4;
+}
+
+.evidence-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.evidence-chip {
+  font-size: 0.72rem;
+  background: rgba(124, 58, 237, 0.12);
+  color: #a78bfa;
+  border: 1px solid rgba(124, 58, 237, 0.25);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+/* ─── Timeline ─────────────────────────────────────────────────────────────── */
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.timeline-item {
+  display: flex;
+  gap: 12px;
+  padding: 8px 0;
+  border-left: 2px solid var(--border);
+  padding-left: 16px;
+  position: relative;
+  animation: fadeIn 0.25s ease-out;
+}
+
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: 14px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+}
+
+.timeline-item.complete::before  { background: var(--success); }
+.timeline-item.running::before   { background: var(--warning); animation: pulse 1.2s infinite; }
+.timeline-item.failed::before    { background: var(--danger); }
+.timeline-item.root_cause::before { background: var(--primary); }
+
+.timeline-time {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 60px;
+}
+
+.timeline-message {
+  font-size: 0.83rem;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+/* ─── Results Section ─────────────────────────────────────────────────────── */
+.results-grid {
+  display: grid;
+  gap: 20px;
+  animation: fadeIn 0.4s ease-out;
+}
+
+.root-cause-box {
+  background: rgba(124, 58, 237, 0.1);
+  border: 1px solid rgba(124, 58, 237, 0.3);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.root-cause-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #a78bfa;
+  margin-bottom: 8px;
+}
+
+.root-cause-text {
+  font-size: 0.95rem;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.fix-box {
+  background: rgba(34, 197, 94, 0.07);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.fix-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--success);
+  margin-bottom: 10px;
+}
+
+.fix-steps {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fix-step {
+  display: flex;
+  gap: 10px;
+  font-size: 0.875rem;
+  color: var(--text-dim);
+}
+
+.fix-step-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(34, 197, 94, 0.2);
+  color: var(--success);
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.verification-box {
+  background: rgba(34, 197, 94, 0.07);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.verification-box.fail {
+  background: rgba(239, 68, 68, 0.07);
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+.verification-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--success);
+  margin-bottom: 8px;
+}
+
+.verification-box.fail .verification-label { color: var(--danger); }
+
+.verification-text {
+  font-size: 0.875rem;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ─── Investigation section header ─────────────────────────────────────────── */
+.investigation-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.investigation-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+/* ─── Error message ─────────────────────────────────────────────────────────── */
+.error-banner {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  padding: 10px 16px;
+  font-size: 0.875rem;
+  margin-bottom: 16px;
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* ─── Empty / loading placeholders ──────────────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-card) 0%,
+    var(--bg-card-alt) 50%,
+    var(--bg-card) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+  border-radius: var(--radius-sm);
+  height: 14px;
+}
+
+/* ─── Connection dot ─────────────────────────────────────────────────────────── */
+.connection-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  display: inline-block;
+  margin-right: 6px;
+}
+
+.connection-dot.connected {
+  background: var(--success);
+  animation: pulse 1.5s infinite;
+}
