@@ -31,6 +31,14 @@ export interface TimelineEvent {
   data: Record<string, unknown>;
 }
 
+export interface InvestigationSummary {
+  id: string;
+  title: string;
+  status: InvestigationStatus;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface InvestigationState {
   id: string;
   title: string;

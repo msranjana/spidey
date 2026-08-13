@@ -184,6 +184,14 @@ class InvestigationManager:
     def get(self, inv_id: str) -> InvestigationState | None:
         return self._investigations.get(inv_id)
 
+    def list(self) -> list[InvestigationState]:
+        """Return all investigations, newest first."""
+        return sorted(
+            self._investigations.values(),
+            key=lambda s: (s.created_at, s.id),
+            reverse=True,
+        )
+
     def update_agent(self, inv_id: str, agent_name: str, result: AgentResult) -> None:
         state = self._investigations[inv_id]
         state.agents[agent_name] = result

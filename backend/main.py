@@ -18,6 +18,7 @@ from investigation import InvestigationManager
 from models import (
     AgentResult,
     InvestigationState,
+    InvestigationSummary,
     StartInvestigationRequest,
     StartInvestigationResponse,
 )
@@ -59,6 +60,21 @@ app.add_middleware(
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/api/investigations", response_model=list[InvestigationSummary])
+async def list_investigations() -> list[InvestigationSummary]:
+    """List all investigations (newest first)."""
+    return [
+        InvestigationSummary(
+            id=state.id,
+            title=state.title,
+            status=state.status,
+            created_at=state.created_at,
+            updated_at=state.updated_at,
+        )
+        for state in manager.list()
+    ]
 
 
 @app.post("/api/investigations", response_model=StartInvestigationResponse, status_code=201)

@@ -53,6 +53,14 @@ class InvestigationState(BaseModel):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class InvestigationSummary(BaseModel):
+    id: str
+    title: str
+    status: InvestigationStatus
+    created_at: datetime
+    updated_at: datetime
+
+
 class StartInvestigationRequest(BaseModel):
     title: str = "Untitled Investigation"
 
