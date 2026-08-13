@@ -1,13 +1,13 @@
 import type {
+  DemoScenario,
   InvestigationState,
   InvestigationSummary,
+  StartInvestigationRequest,
   StartInvestigationResponse,
 } from './types';
 
-const BASE_URL = 'http://localhost:8000';
-
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await fetch(path, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });
@@ -18,49 +18,56 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-/**
- * List all investigations (newest first).
- * GET /api/investigations
- */
 export function listInvestigations(): Promise<InvestigationSummary[]> {
   return request<InvestigationSummary[]>('/api/investigations');
 }
 
-/**
- * Create a new investigation.
- * POST /api/investigations
- */
+export function listDemoScenarios(): Promise<DemoScenario[]> {
+  return request<DemoScenario[]>('/api/demo/scenarios');
+}
+
 export function startInvestigation(
-  title = 'API Database Connection Failure',
+  input: string | StartInvestigationRequest = 'API Database Connection Failure',
 ): Promise<StartInvestigationResponse> {
+  const body: StartInvestigationRequest =
+    typeof input === 'string'
+      ? { title: input }
+      : { title: 'Untitled Investigation', ...input };
+
   return request<StartInvestigationResponse>('/api/investigations', {
     method: 'POST',
-    body: JSON.stringify({ title }),
+    body: JSON.stringify(body),
   });
 }
 
-/**
- * Kick off the deterministic demo scenario.
- * POST /api/investigations/{id}/run-demo
- */
-export function runDemo(id: string): Promise<{ started: boolean }> {
-  return request<{ started: boolean }>(`/api/investigations/${id}/run-demo`, {
+export function startInvestigationRun(id: string): Promise<{ investigation_id: string }> {
+  return request<{ investigation_id: string }>(`/api/investigations/${id}/start`, {
     method: 'POST',
   });
 }
 
-/**
- * Fetch current investigation state snapshot.
- * GET /api/investigations/{id}
- */
+export async function startCustomInvestigation(
+  payload: StartInvestigationRequest,
+): Promise<StartInvestigationResponse> {
+  const created = await startInvestigation(payload);
+  await startInvestigationRun(created.investigation_id);
+  return created;
+}
+
+export function runDemo(
+  id: string,
+  scenarioId?: string,
+): Promise<{ investigation_id: string; scenario_id: string; message: string }> {
+  const query = scenarioId ? `?scenario_id=${encodeURIComponent(scenarioId)}` : '';
+  return request(`/api/investigations/${id}/run-demo${query}`, {
+    method: 'POST',
+  });
+}
+
 export function getInvestigation(id: string): Promise<InvestigationState> {
   return request<InvestigationState>(`/api/investigations/${id}`);
 }
 
-/**
- * Build the SSE stream URL for an investigation.
- * (Used by useInvestigation hook via EventSource.)
- */
 export function streamUrl(id: string): string {
-  return `${BASE_URL}/api/investigations/${id}/stream`;
+  return `/api/investigations/${id}/stream`;
 }

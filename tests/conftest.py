@@ -57,7 +57,8 @@ def app():
 @pytest.fixture()
 def client(app):
     """Return a fresh synchronous TestClient for each test."""
-    return TestClient(app)
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 # ---------------------------------------------------------------------------

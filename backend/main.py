@@ -7,10 +7,9 @@ Start with:
 from __future__ import annotations
 
 import asyncio
-import json
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -18,6 +17,7 @@ from investigation import InvestigationManager
 from models import (
     AgentResult,
     InvestigationState,
+    InvestigationStatus,
     InvestigationSummary,
     StartInvestigationRequest,
     StartInvestigationResponse,
@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):  # noqa: ANN001
 app = FastAPI(
     title="Spider-Sense",
     description="Agentic incident-response tool API",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
@@ -62,6 +62,14 @@ async def health() -> dict:
     return {"status": "ok"}
 
 
+@app.get("/api/demo/scenarios")
+async def list_demo_scenarios() -> list[dict]:
+    """Return metadata for all registered demo scenarios."""
+    from demo.registry import list_scenarios
+
+    return list_scenarios()
+
+
 @app.get("/api/investigations", response_model=list[InvestigationSummary])
 async def list_investigations() -> list[InvestigationSummary]:
     """List all investigations (newest first)."""
@@ -78,14 +86,31 @@ async def list_investigations() -> list[InvestigationSummary]:
 
 
 @app.post("/api/investigations", response_model=StartInvestigationResponse, status_code=201)
-async def start_investigation(body: StartInvestigationRequest = StartInvestigationRequest()) -> StartInvestigationResponse:
-    """Create and immediately start a new investigation."""
-    state = manager.create(title=body.title)
-    asyncio.create_task(manager.run_investigation(state.id))
+async def create_investigation(
+    body: StartInvestigationRequest = StartInvestigationRequest(),
+) -> StartInvestigationResponse:
+    """Create a new investigation (does not start the pipeline)."""
+    state = manager.create(
+        title=body.title,
+        logs=body.logs,
+        stack_trace=body.stack_trace,
+        config_snippet=body.config_snippet,
+        code_snippet=body.code_snippet,
+    )
     return StartInvestigationResponse(
         investigation_id=state.id,
         status=state.status,
     )
+
+
+@app.post("/api/investigations/{inv_id}/start", status_code=202)
+async def start_investigation(inv_id: str) -> dict:
+    """Start the investigation pipeline for a custom incident."""
+    state = manager.get(inv_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    asyncio.create_task(manager.run_investigation(inv_id))
+    return {"investigation_id": inv_id, "message": "Investigation started"}
 
 
 @app.get("/api/investigations/{inv_id}", response_model=InvestigationState)
@@ -105,30 +130,61 @@ async def get_agents(inv_id: str) -> dict[str, AgentResult]:
 
 
 @app.post("/api/investigations/{inv_id}/run-demo", status_code=202)
-async def run_demo(inv_id: str) -> dict:
-    """Re-trigger the demo scenario for an existing investigation."""
+async def run_demo(inv_id: str, scenario_id: str | None = None) -> dict:
+    """Run a deterministic demo scenario for an existing investigation."""
+    from demo.registry import get_fixture, resolve_scenario_id
+
     state = manager.get(inv_id)
     if state is None:
         raise HTTPException(status_code=404, detail="Investigation not found")
-    asyncio.create_task(manager.run_investigation(inv_id))
-    return {"investigation_id": inv_id, "message": "Demo triggered"}
+
+    resolved_id = resolve_scenario_id(scenario_id)
+    try:
+        get_fixture(resolved_id)
+    except KeyError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown scenario_id: {scenario_id}",
+        ) from None
+
+    state.scenario_id = resolved_id
+    asyncio.create_task(manager.run_investigation(inv_id, scenario_id=resolved_id))
+    return {
+        "investigation_id": inv_id,
+        "scenario_id": resolved_id,
+        "message": "Demo triggered",
+    }
 
 
 @app.get("/api/investigations/{inv_id}/stream")
-async def stream_investigation(inv_id: str) -> StreamingResponse:
+async def stream_investigation(inv_id: str, request: Request) -> StreamingResponse:
     """SSE stream of investigation events."""
     state = manager.get(inv_id)
     if state is None:
         raise HTTPException(status_code=404, detail="Investigation not found")
 
     async def event_generator():
-        # Send a comment line immediately so the client knows the stream is open
-        yield ": connected\n\n"
-        async for raw_json in manager.subscribe(inv_id):
-            # SSE format: data: <payload>\n\n
-            yield f"data: {raw_json}\n\n"
-        # Final empty comment to signal stream end
-        yield ": done\n\n"
+        q = manager.attach_subscriber(inv_id)
+        try:
+            yield ": connected\n\n"
+            while not await request.is_disconnected():
+                try:
+                    item = await asyncio.wait_for(q.get(), timeout=0.25)
+                except asyncio.TimeoutError:
+                    current = manager.get(inv_id)
+                    if current is not None and current.status in (
+                        InvestigationStatus.PENDING,
+                        InvestigationStatus.COMPLETE,
+                        InvestigationStatus.FAILED,
+                    ):
+                        break
+                    continue
+                if item is None:
+                    break
+                yield f"data: {item}\n\n"
+            yield ": done\n\n"
+        finally:
+            manager.detach_subscriber(inv_id, q)
 
     return StreamingResponse(
         event_generator(),

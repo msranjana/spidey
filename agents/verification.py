@@ -31,6 +31,18 @@ class VerificationAgent(BaseAgent):
             "disk_usage_pct": 61,  # after vacuum + PVC resize
         }
 
+        verification_checks = [
+            {"name": "API Health", "status": "pass", "message": checks["api_health"]},
+            {"name": "DB Connections", "status": "pass", "message": checks["db_connections"]},
+            {"name": "Error Rate", "status": "pass", "message": checks["error_rate"]},
+            {"name": "PostgreSQL Pod", "status": "pass", "message": checks["postgres_pod"]},
+            {
+                "name": "Disk Usage",
+                "status": "pass",
+                "message": f"{checks['disk_usage_pct']}% (post-remediation)",
+            },
+        ]
+
         all_pass = (
             checks["api_health"] == "200 OK"
             and checks["postgres_pod"] == "Running"
@@ -50,6 +62,7 @@ class VerificationAgent(BaseAgent):
 
         evidence: dict[str, Any] = {
             "verdict": verdict,
+            "verification_checks": verification_checks,
             **checks,
             "checks_run": len(checks),
             "checks_passed": len(checks),

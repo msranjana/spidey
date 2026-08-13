@@ -4,6 +4,7 @@
    ============================================================ */
 
 .ograph-wrapper {
+  position: relative;
   width: 100%;
   background: #0f172a;
   border-radius: 12px;
@@ -45,6 +46,117 @@
   fill: #ef4444;
 }
 
+/* ── Clickable scout nodes ── */
+.ograph-node--clickable {
+  cursor: pointer;
+}
+
+.ograph-node--clickable:focus-visible {
+  outline: none;
+}
+
+.ograph-node--clickable:focus-visible .ograph-node-circle {
+  stroke: #60a5fa;
+  stroke-width: 2.5;
+}
+
+.ograph-node-hit {
+  fill: transparent;
+  stroke: none;
+  pointer-events: all;
+}
+
+.ograph-node--clickable:hover .ograph-node-circle {
+  filter: brightness(1.15);
+}
+
+/* ── Selected scout highlight ── */
+.ograph-selected-ring {
+  fill: none;
+  stroke: #60a5fa;
+  stroke-width: 2.5;
+  opacity: 0.9;
+  animation: ograph-selected-glow 2s ease-in-out infinite;
+}
+
+@keyframes ograph-selected-glow {
+  0%, 100% {
+    opacity: 0.7;
+    stroke-width: 2;
+  }
+  50% {
+    opacity: 1;
+    stroke-width: 3;
+  }
+}
+
+.ograph-node--selected .ograph-node-label {
+  fill: #93c5fd;
+  font-weight: 600;
+}
+
+/* ── Hover tooltip ── */
+.ograph-tooltip {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 10px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  animation: ograph-tooltip-in 0.15s ease-out;
+}
+
+@keyframes ograph-tooltip-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -90%);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -100%);
+  }
+}
+
+.ograph-tooltip__label {
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: #e2e8f0;
+  white-space: nowrap;
+}
+
+.ograph-tooltip__status {
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.ograph-tooltip__status--running {
+  color: #f59e0b;
+}
+
+.ograph-tooltip__status--complete {
+  color: #22c55e;
+}
+
+.ograph-tooltip__status--failed {
+  color: #ef4444;
+}
+
+.ograph-tooltip__status--idle {
+  color: #64748b;
+}
+
 /* ── Checkmark inside completed node ── */
 .ograph-checkmark {
   stroke: #fff;
@@ -67,6 +179,7 @@
   opacity: 0;
   transform-origin: center;
   transform-box: fill-box;
+  pointer-events: none;
 }
 
 .ograph-pulse-ring--active {

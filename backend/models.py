@@ -40,14 +40,38 @@ class TimelineEvent(BaseModel):
     data: dict[str, Any] = Field(default_factory=dict)
 
 
+class ContributingEvidence(BaseModel):
+    source: str
+    finding: str
+    relevance: float = Field(ge=0.0, le=1.0)
+
+
+class VerificationCheck(BaseModel):
+    name: str
+    status: str  # pass | fail | warn
+    message: str
+
+
 class InvestigationState(BaseModel):
     id: str
     title: str
     status: InvestigationStatus = InvestigationStatus.PENDING
+    scenario_id: str | None = None
     agents: dict[str, AgentResult] = Field(default_factory=dict)
+    logs: str | None = None
+    stack_trace: str | None = None
+    config_snippet: str | None = None
+    code_snippet: str | None = None
     root_cause: str | None = None
+    confidence: float | None = None
+    severity: str | None = None
+    affected_component: str | None = None
+    contributing_evidence: list[ContributingEvidence] = Field(default_factory=list)
     proposed_fix: str | None = None
+    proposed_fix_diff: str | None = None
+    fix_steps: list[str] = Field(default_factory=list)
     verification_result: str | None = None
+    verification_checks: list[VerificationCheck] = Field(default_factory=list)
     timeline: list[TimelineEvent] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
@@ -63,6 +87,10 @@ class InvestigationSummary(BaseModel):
 
 class StartInvestigationRequest(BaseModel):
     title: str = "Untitled Investigation"
+    logs: str | None = None
+    stack_trace: str | None = None
+    config_snippet: str | None = None
+    code_snippet: str | None = None
 
 
 class StartInvestigationResponse(BaseModel):

@@ -1,0 +1,208 @@
+{
+  "_comment": "Static expected-outcome fixture for the TLS Certificate Expiry demo scenario.",
+  "schema_version": "1.0",
+  "scenario": {
+    "id": "tls-certificate-expiry",
+    "title": "TLS Certificate Expiry — API Gateway",
+    "description": "api-gateway HTTPS endpoints are failing TLS handshakes. The ingress certificate expired 47 minutes ago and 1,203 clients received connection errors.",
+    "severity": "HIGH",
+    "log_count": 16,
+    "log_levels_present": ["INFO", "WARN", "ERROR", "CRITICAL"],
+    "infra_state_keys": ["pods", "ingress", "certificates", "services", "error_budget"],
+    "repo_context_keys": ["relevant_files", "total_files", "repo", "commit"]
+  },
+  "expected_agents": {
+    "Log Scout": {
+      "status": "COMPLETE",
+      "findings_count_min": 2,
+      "findings": [
+        "SSL handshake failed: certificate has expired",
+        "x509: certificate has expired or is not yet valid",
+        "1,203 TLS handshake failures in the last 30 minutes"
+      ],
+      "evidence_keys": [
+        "log_lines_analyzed",
+        "error_count",
+        "critical_pattern",
+        "first_error_ts",
+        "last_error_ts"
+      ],
+      "evidence": {
+        "log_lines_analyzed": 654,
+        "error_count": 1203,
+        "critical_pattern": "cert_expired",
+        "first_error_ts": "2026-08-12T14:30:05Z",
+        "last_error_ts": "2026-08-12T15:17:12Z"
+      }
+    },
+    "Code Hunter": {
+      "status": "COMPLETE",
+      "findings_count_min": 2,
+      "findings": [
+        "Ingress TLS secret references expired cert api-gateway-tls",
+        "cert-manager renewal hook disabled in Helm values",
+        "No alerting on Certificate Ready=False condition"
+      ],
+      "evidence_keys": [
+        "files_scanned",
+        "severity",
+        "affected_files",
+        "rule_hits"
+      ],
+      "evidence": {
+        "files_scanned": 29,
+        "severity": "medium",
+        "affected_files": [
+          "k8s/ingress/api-gateway.yaml",
+          "helm/values-prod.yaml"
+        ],
+        "rule_hits": {
+          "expired_cert_reference": 1,
+          "cert_manager_disabled": 1,
+          "missing_cert_alert": 1
+        }
+      }
+    },
+    "Infra Scout": {
+      "status": "COMPLETE",
+      "findings_count_min": 2,
+      "findings": [
+        "Certificate api-gateway-tls expired 47 minutes ago",
+        "Ingress nginx-ingress unhealthy — TLS termination failing"
+      ],
+      "evidence_keys": [
+        "cert_status",
+        "cert_expiry",
+        "ingress_status",
+        "days_until_expiry"
+      ],
+      "evidence": {
+        "cert_status": "Expired",
+        "cert_expiry": "2026-08-12T14:30:00Z",
+        "ingress_status": "Unhealthy",
+        "days_until_expiry": -1
+      }
+    },
+    "Security Scout": {
+      "status": "COMPLETE",
+      "findings_count_min": 1,
+      "findings": [
+        "No evidence of certificate tampering",
+        "Expiry is operational misconfiguration, not intrusion"
+      ],
+      "evidence_keys": [
+        "auth_events_checked",
+        "suspicious_ips"
+      ],
+      "evidence": {
+        "auth_events_checked": 180,
+        "suspicious_ips": 0
+      }
+    },
+    "Root Cause": {
+      "status": "COMPLETE",
+      "findings_count_min": 2,
+      "findings_contain": [
+        "certificate",
+        "expired"
+      ],
+      "evidence_keys": [
+        "confidence",
+        "root_cause_summary",
+        "triggers",
+        "correlated_agents"
+      ],
+      "evidence": {
+        "confidence": 0.99,
+        "root_cause_summary": "The api-gateway TLS certificate expired because cert-manager auto-renewal was disabled in production Helm values.",
+        "triggers": {
+          "cert_expired": true,
+          "ingress_unhealthy": true,
+          "tls_handshake_failure": true
+        },
+        "correlated_agents": ["Log Scout", "Infra Scout", "Code Hunter"]
+      }
+    },
+    "Fix": {
+      "status": "COMPLETE",
+      "findings_count_min": 3,
+      "findings_contain": [
+        "cert-manager",
+        "Certificate",
+        "ingress"
+      ],
+      "evidence_keys": [
+        "step_count",
+        "risk",
+        "estimated_minutes",
+        "reversible",
+        "commands"
+      ],
+      "evidence": {
+        "step_count": 4,
+        "risk": "low",
+        "estimated_minutes": 6,
+        "reversible": true
+      }
+    },
+    "Verification": {
+      "status": "COMPLETE",
+      "findings_count_min": 3,
+      "findings_contain": [
+        "PASS",
+        "TLS",
+        "200 OK"
+      ],
+      "evidence_keys": [
+        "verdict",
+        "api_health",
+        "tls_valid",
+        "cert_expiry_days",
+        "error_rate"
+      ],
+      "evidence": {
+        "verdict": "PASS",
+        "api_health": "200 OK",
+        "tls_valid": true,
+        "cert_expiry_days": 89,
+        "error_rate": "0.00%",
+        "checks_run": 4,
+        "checks_passed": 4
+      }
+    }
+  },
+  "expected_root_cause_contains": "certificate",
+  "expected_root_cause_full": "The api-gateway TLS certificate expired because cert-manager auto-renewal was disabled, causing widespread HTTPS handshake failures.",
+  "expected_fix_steps": [
+    "Step 1 — Re-enable cert-manager: set certManager.enabled=true in helm/values-prod.yaml",
+    "Step 2 — Force renewal: kubectl cert-manager renew api-gateway-tls",
+    "Step 3 — Restart ingress: kubectl rollout restart deployment/nginx-ingress-controller",
+    "Step 4 — Add cert expiry alert: CertificateReady=False for 24h"
+  ],
+  "expected_verification": {
+    "verified": true,
+    "verdict": "PASS",
+    "checks": {
+      "api_health": "200 OK",
+      "tls_valid": true,
+      "cert_expiry_days": 89,
+      "error_rate": "0.00%"
+    }
+  },
+  "expected_investigation": {
+    "status": "COMPLETE",
+    "agents_complete": [
+      "Log Scout",
+      "Code Hunter",
+      "Infra Scout",
+      "Security Scout",
+      "Root Cause",
+      "Fix",
+      "Verification"
+    ],
+    "root_cause_not_null": true,
+    "proposed_fix_not_null": true,
+    "verification_result_not_null": true,
+    "timeline_events_min": 10
+  }
+}

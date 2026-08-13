@@ -1,0 +1,215 @@
+{
+  "_comment": "Static expected-outcome fixture for the Memory OOM Kill demo scenario.",
+  "schema_version": "1.0",
+  "scenario": {
+    "id": "memory-oom-kill",
+    "title": "Memory OOM Kill — Order Service",
+    "description": "order-service pods are being OOMKilled. Heap usage spiked to 100% and Kubernetes terminated 3 replicas in the last 10 minutes.",
+    "severity": "CRITICAL",
+    "log_count": 18,
+    "log_levels_present": ["INFO", "WARN", "ERROR", "CRITICAL"],
+    "infra_state_keys": ["pods", "nodes", "services", "error_budget"],
+    "repo_context_keys": ["relevant_files", "total_files", "repo", "commit"]
+  },
+  "expected_agents": {
+    "Log Scout": {
+      "status": "COMPLETE",
+      "findings_count_min": 2,
+      "findings": [
+        "java.lang.OutOfMemoryError: Java heap space in order-service",
+        "Pod order-service-7f2a9b-xk1m OOMKilled — exit code 137",
+        "412 failed checkout requests in the last 10 minutes"
+      ],
+      "evidence_keys": [
+        "log_lines_analyzed",
+        "error_count",
+        "critical_pattern",
+        "first_error_ts",
+        "last_error_ts"
+      ],
+      "evidence": {
+        "log_lines_analyzed": 892,
+        "error_count": 412,
+        "critical_pattern": "oom_kill",
+        "first_error_ts": "2026-08-12T14:52:10Z",
+        "last_error_ts": "2026-08-12T15:02:44Z"
+      }
+    },
+    "Code Hunter": {
+      "status": "COMPLETE",
+      "findings_count_min": 2,
+      "findings": [
+        "Unbounded in-memory order cache in OrderCache.java",
+        "Missing JVM heap limits in deployment manifest",
+        "No eviction policy on session-scoped product catalog"
+      ],
+      "evidence_keys": [
+        "files_scanned",
+        "severity",
+        "affected_files",
+        "rule_hits"
+      ],
+      "evidence": {
+        "files_scanned": 38,
+        "severity": "high",
+        "affected_files": [
+          "src/main/java/com/acme/order/OrderCache.java",
+          "k8s/order-service-deployment.yaml"
+        ],
+        "rule_hits": {
+          "unbounded_cache": 3,
+          "missing_heap_limit": 1,
+          "no_eviction_policy": 2
+        }
+      }
+    },
+    "Infra Scout": {
+      "status": "COMPLETE",
+      "findings_count_min": 2,
+      "findings": [
+        "order-service pods in OOMKilled state — 3 restarts in 10 minutes",
+        "Node node-02 memory pressure at 96% — eviction threshold breached"
+      ],
+      "evidence_keys": [
+        "pod_status",
+        "pod_restarts",
+        "memory_usage_pct",
+        "memory_limit_mib",
+        "node_mem_pct"
+      ],
+      "evidence": {
+        "pod_status": "OOMKilled",
+        "pod_restarts": 3,
+        "memory_usage_pct": 100,
+        "memory_limit_mib": 512,
+        "node_mem_pct": 96
+      }
+    },
+    "Security Scout": {
+      "status": "COMPLETE",
+      "findings_count_min": 1,
+      "findings": [
+        "No signs of memory-exhaustion attack",
+        "Traffic patterns within normal baseline"
+      ],
+      "evidence_keys": [
+        "auth_events_checked",
+        "suspicious_ips"
+      ],
+      "evidence": {
+        "auth_events_checked": 210,
+        "suspicious_ips": 0
+      }
+    },
+    "Root Cause": {
+      "status": "COMPLETE",
+      "findings_count_min": 2,
+      "findings_contain": [
+        "memory leak",
+        "OrderCache"
+      ],
+      "evidence_keys": [
+        "confidence",
+        "root_cause_summary",
+        "triggers",
+        "correlated_agents"
+      ],
+      "evidence": {
+        "confidence": 0.94,
+        "root_cause_summary": "Unbounded OrderCache growth caused heap exhaustion and OOMKills on order-service pods.",
+        "triggers": {
+          "memory_leak": true,
+          "oom_kill": true,
+          "heap_exhaustion": true
+        },
+        "correlated_agents": ["Log Scout", "Infra Scout", "Code Hunter"]
+      }
+    },
+    "Fix": {
+      "status": "COMPLETE",
+      "findings_count_min": 4,
+      "findings_contain": [
+        "OrderCache",
+        "memory limit",
+        "rollout restart"
+      ],
+      "evidence_keys": [
+        "step_count",
+        "risk",
+        "estimated_minutes",
+        "reversible",
+        "commands",
+        "config_changes"
+      ],
+      "evidence": {
+        "step_count": 4,
+        "risk": "low",
+        "estimated_minutes": 8,
+        "reversible": true,
+        "config_changes": {
+          "JVM_HEAP_MAX": { "from": "512m", "to": "1024m" },
+          "ORDER_CACHE_MAX_ENTRIES": { "from": null, "to": 10000 }
+        }
+      }
+    },
+    "Verification": {
+      "status": "COMPLETE",
+      "findings_count_min": 3,
+      "findings_contain": [
+        "PASS",
+        "Running",
+        "heap"
+      ],
+      "evidence_keys": [
+        "verdict",
+        "api_health",
+        "pod_status",
+        "heap_usage_pct",
+        "error_rate"
+      ],
+      "evidence": {
+        "verdict": "PASS",
+        "api_health": "200 OK",
+        "pod_status": "Running",
+        "heap_usage_pct": 62,
+        "error_rate": "0.00%",
+        "checks_run": 4,
+        "checks_passed": 4
+      }
+    }
+  },
+  "expected_root_cause_contains": "memory leak",
+  "expected_root_cause_full": "Unbounded OrderCache memory leak in order-service caused Java heap exhaustion, triggering Kubernetes OOMKills and 412 checkout failures.",
+  "expected_fix_steps": [
+    "Step 1 — Deploy hotfix: add LRU eviction to OrderCache.java",
+    "Step 2 — Raise memory limit: set resources.limits.memory=1Gi in deployment",
+    "Step 3 — Rollout restart: kubectl rollout restart deployment/order-service",
+    "Step 4 — Set ORDER_CACHE_MAX_ENTRIES=10000 in app config"
+  ],
+  "expected_verification": {
+    "verified": true,
+    "verdict": "PASS",
+    "checks": {
+      "api_health": "200 OK",
+      "pod_status": "Running",
+      "heap_usage_pct": 62,
+      "error_rate": "0.00%"
+    }
+  },
+  "expected_investigation": {
+    "status": "COMPLETE",
+    "agents_complete": [
+      "Log Scout",
+      "Code Hunter",
+      "Infra Scout",
+      "Security Scout",
+      "Root Cause",
+      "Fix",
+      "Verification"
+    ],
+    "root_cause_not_null": true,
+    "proposed_fix_not_null": true,
+    "verification_result_not_null": true,
+    "timeline_events_min": 10
+  }
+}

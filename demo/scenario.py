@@ -8,11 +8,16 @@ Usage::
 
     from demo.scenario import SCENARIO
     print(SCENARIO["title"])
+
+    from demo.registry import list_scenarios, get_fixture
+    print(list_scenarios())
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
+
+from demo.registry import DEFAULT_SCENARIO_ID
 
 
 def _ts(offset_seconds: int) -> str:
@@ -40,7 +45,7 @@ def _log_ts(offset_seconds: int) -> str:
 # ---------------------------------------------------------------------------
 
 SCENARIO: dict = {
-    "id": "api-db-connection-failure",
+    "id": DEFAULT_SCENARIO_ID,
     "title": "API Database Connection Failure",
     "description": (
         "api-gateway is returning 503 errors. "

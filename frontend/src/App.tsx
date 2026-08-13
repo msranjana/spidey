@@ -1,60 +1,60 @@
 /**
- * App.tsx — Spider-Sense frontend root
- *
- * Sections:
- *  1. Header — branding
- *  2. Control bar — Run Demo button + status badge
- *  3. Pipeline graph — SVG orchestration visualization
- *  4. Agent cards — per-agent status + findings
- *  5. Results panel — root cause / fix / verification
+ * App.tsx — Spider-Sense integrated frontend
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import './App.css';
 import OrchestrationGraph from './components/OrchestrationGraph';
+import AgentCard from './components/AgentCard';
+import EvidenceExplorer from './components/EvidenceExplorer';
+import ResultsPanels from './components/ResultsPanels';
+import IncidentInput from './components/IncidentInput';
+import InvestigationHistory from './components/InvestigationHistory';
+import {
+  getInvestigation,
+  listDemoScenarios,
+  runDemo,
+  startInvestigation,
+  streamUrl,
+} from './api';
 import {
   AgentStatus,
+  InvestigationStatus,
+  type AgentResult,
   type AgentUpdatePayload,
-  type InvestigationUpdatePayload,
   type CompletePayload,
+  type ContributingEvidence,
+  type DemoScenario,
+  type InvestigationUpdatePayload,
+  type VerificationCheck,
 } from './types';
-
-// ─────────────────────────────────────────────
-// Constants
-// ─────────────────────────────────────────────
-
-const AGENT_ICONS: Record<string, string> = {
-  'Log Scout':      '📋',
-  'Code Hunter':    '🔍',
-  'Infra Scout':    '🏗️',
-  'Security Scout': '🔒',
-};
 
 const SCOUT_AGENTS = ['Log Scout', 'Code Hunter', 'Infra Scout', 'Security Scout'];
 
-// ─────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────
+const EMPTY_RESULTS = {
+  root_cause: null as string | null,
+  confidence: null as number | null,
+  severity: null as string | null,
+  affected_component: null as string | null,
+  contributing_evidence: [] as ContributingEvidence[],
+  proposed_fix: null as string | null,
+  proposed_fix_diff: null as string | null,
+  fix_steps: [] as string[],
+  verification_result: null as string | null,
+  verification_checks: [] as VerificationCheck[],
+};
 
-interface AgentInfo {
-  status: AgentStatus;
-  findings: string[];
-}
-
-interface ResultsState {
-  rootCause:          string | null;
-  proposedFix:        string | null;
-  verificationResult: string | null;
-}
-
-// ─────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────
-
-function initialAgents(): Record<string, AgentInfo> {
-  const rec: Record<string, AgentInfo> = {};
+function initialAgents(): Record<string, AgentResult> {
+  const rec: Record<string, AgentResult> = {};
   for (const name of SCOUT_AGENTS) {
-    rec[name] = { status: AgentStatus.IDLE, findings: [] };
+    rec[name] = {
+      agent_name: name,
+      status: AgentStatus.IDLE,
+      findings: [],
+      evidence: {},
+      started_at: null,
+      completed_at: null,
+    };
   }
   return rec;
 }
@@ -80,75 +80,79 @@ function statusDotClass(status: string): string {
   return 'status-dot';
 }
 
-// ─────────────────────────────────────────────
-// AgentCard sub-component
-// ─────────────────────────────────────────────
-
-interface AgentCardProps {
-  name: string;
-  info: AgentInfo;
-}
-
-function AgentCard({ name, info }: AgentCardProps) {
-  const statusLower = info.status.toLowerCase();
-
-  function idleText(): string {
-    if (info.status === AgentStatus.IDLE)    return 'Waiting to start…';
-    if (info.status === AgentStatus.RUNNING) return 'Investigating…';
-    return 'No findings';
-  }
-
-  return (
-    <div className={`agent-card agent-card--${statusLower}`} role="article" aria-label={name}>
-      <div className="agent-card__header">
-        <div className="agent-card__icon" aria-hidden="true">
-          {AGENT_ICONS[name] ?? '🤖'}
-        </div>
-        <span className="agent-card__name">{name}</span>
-        <span className={`agent-card__status agent-card__status--${statusLower}`}>
-          {info.status}
-        </span>
-      </div>
-      <div className="agent-card__findings">
-        {info.findings.length > 0 ? (
-          info.findings.map((f, i) => (
-            <div key={i} className="agent-card__finding">{f}</div>
-          ))
-        ) : (
-          <span className="agent-card__idle-text">{idleText()}</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────
-// App
-// ─────────────────────────────────────────────
-
 export default function App() {
-  const [investigationId, setInvestigationId]         = useState<string | null>(null);
+  const [investigationId, setInvestigationId] = useState<string | null>(null);
   const [investigationStatus, setInvestigationStatus] = useState<string>('');
-  const [agents, setAgents]                           = useState<Record<string, AgentInfo>>(initialAgents());
-  const [results, setResults]                         = useState<ResultsState>({
-    rootCause: null, proposedFix: null, verificationResult: null,
-  });
+  const [agents, setAgents] = useState<Record<string, AgentResult>>(initialAgents());
+  const [results, setResults] = useState(EMPTY_RESULTS);
+  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [scenarios, setScenarios] = useState<DemoScenario[]>([]);
+  const [selectedScenarioId, setSelectedScenarioId] = useState('api-db-connection-failure');
   const [isStarting, setIsStarting] = useState(false);
-  const [error, setError]           = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [fixDecision, setFixDecision] = useState<'pending' | 'approved' | 'rejected'>('pending');
+  const [showIncidentInput, setShowIncidentInput] = useState(false);
   const esRef = useRef<EventSource | null>(null);
 
-  // Derived: is a run active?
   const isActive = investigationStatus === 'RUNNING'
     || investigationStatus === 'root_cause'
     || investigationStatus === 'fix_proposed';
 
-  // ── SSE handler ──────────────────────────────
+  useEffect(() => {
+    listDemoScenarios()
+      .then(setScenarios)
+      .catch(() => {
+        setScenarios([
+          {
+            id: 'api-db-connection-failure',
+            title: 'API Database Connection Failure',
+            description: 'DB connection pool exhausted',
+            severity: 'CRITICAL',
+          },
+          {
+            id: 'memory-oom-kill',
+            title: 'Memory OOM Kill',
+            description: 'Order service OOM killed',
+            severity: 'HIGH',
+          },
+          {
+            id: 'tls-certificate-expiry',
+            title: 'TLS Certificate Expiry',
+            description: 'Expired ingress certificate',
+            severity: 'HIGH',
+          },
+        ]);
+      });
+  }, []);
+
+  const resetRunState = useCallback(() => {
+    setAgents(initialAgents());
+    setResults(EMPTY_RESULTS);
+    setSelectedAgent(null);
+    setFixDecision('pending');
+    setInvestigationStatus('PENDING');
+    setError(null);
+  }, []);
+
+  const applyInvestigationUpdate = useCallback((d: InvestigationUpdatePayload) => {
+    setInvestigationStatus(d.status);
+    setResults(prev => ({
+      root_cause: d.root_cause ?? prev.root_cause,
+      confidence: d.confidence ?? prev.confidence,
+      severity: d.severity ?? prev.severity,
+      affected_component: d.affected_component ?? prev.affected_component,
+      contributing_evidence: d.contributing_evidence ?? prev.contributing_evidence,
+      proposed_fix: d.proposed_fix ?? prev.proposed_fix,
+      proposed_fix_diff: d.proposed_fix_diff ?? prev.proposed_fix_diff,
+      fix_steps: d.fix_steps ?? prev.fix_steps,
+      verification_result: d.verification_result ?? prev.verification_result,
+      verification_checks: d.verification_checks ?? prev.verification_checks,
+    }));
+  }, []);
 
   const connectSSE = useCallback((invId: string) => {
-    if (esRef.current) {
-      esRef.current.close();
-    }
-    const es = new EventSource(`/api/investigations/${invId}/stream`);
+    esRef.current?.close();
+    const es = new EventSource(streamUrl(invId));
     esRef.current = es;
 
     es.onmessage = (evt: MessageEvent<string>) => {
@@ -165,114 +169,128 @@ export default function App() {
         setAgents(prev => ({
           ...prev,
           [d.agent]: {
-            status:   d.status,
+            ...(prev[d.agent] ?? {
+              agent_name: d.agent,
+              findings: [],
+              evidence: {},
+              started_at: null,
+              completed_at: null,
+            }),
+            status: d.status,
             findings: d.findings ?? prev[d.agent]?.findings ?? [],
+            evidence: d.evidence ?? prev[d.agent]?.evidence ?? {},
+            current_task: d.current_task,
+            duration_ms: d.duration_ms,
           },
         }));
       } else if (parsed.type === 'investigation_update') {
-        const d = parsed.data as InvestigationUpdatePayload;
-        setInvestigationStatus(d.status);
-        if (d.root_cause)           setResults(prev => ({ ...prev, rootCause: d.root_cause!          }));
-        if (d.proposed_fix)         setResults(prev => ({ ...prev, proposedFix: d.proposed_fix!      }));
-        if (d.verification_result)  setResults(prev => ({ ...prev, verificationResult: d.verification_result! }));
+        applyInvestigationUpdate(parsed.data as InvestigationUpdatePayload);
       } else if (parsed.type === 'complete') {
         const d = parsed.data as CompletePayload;
         setInvestigationStatus('COMPLETE');
         setResults({
-          rootCause:          d.root_cause,
-          proposedFix:        d.proposed_fix,
-          verificationResult: d.verification_result,
+          root_cause: d.root_cause,
+          confidence: d.confidence ?? null,
+          severity: d.severity ?? null,
+          affected_component: d.affected_component ?? null,
+          contributing_evidence: d.contributing_evidence ?? [],
+          proposed_fix: d.proposed_fix,
+          proposed_fix_diff: d.proposed_fix_diff ?? null,
+          fix_steps: d.fix_steps ?? [],
+          verification_result: d.verification_result,
+          verification_checks: d.verification_checks ?? [],
         });
         es.close();
       }
     };
 
     es.onerror = () => { es.close(); };
-  }, []);
+  }, [applyInvestigationUpdate]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => { esRef.current?.close(); };
-  }, []);
+  useEffect(() => () => { esRef.current?.close(); }, []);
 
-  // ── Run Demo ─────────────────────────────────
+  const loadInvestigation = useCallback(async (invId: string) => {
+    resetRunState();
+    setInvestigationId(invId);
+    try {
+      const state = await getInvestigation(invId);
+      setInvestigationStatus(state.status);
+      const mergedAgents = initialAgents();
+      for (const [name, agent] of Object.entries(state.agents)) {
+        if (SCOUT_AGENTS.includes(name)) {
+          mergedAgents[name] = agent;
+        }
+      }
+      setAgents(mergedAgents);
+      setResults({
+        root_cause: state.root_cause,
+        confidence: state.confidence,
+        severity: state.severity,
+        affected_component: state.affected_component,
+        contributing_evidence: state.contributing_evidence ?? [],
+        proposed_fix: state.proposed_fix,
+        proposed_fix_diff: state.proposed_fix_diff,
+        fix_steps: state.fix_steps ?? [],
+        verification_result: state.verification_result,
+        verification_checks: state.verification_checks ?? [],
+      });
+      if (state.status === InvestigationStatus.RUNNING
+        || state.status === ('root_cause' as InvestigationStatus)
+        || state.status === ('fix_proposed' as InvestigationStatus)) {
+        connectSSE(invId);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load investigation');
+    }
+  }, [connectSSE, resetRunState]);
 
   const handleRunDemo = useCallback(async () => {
     setError(null);
     setIsStarting(true);
-    setAgents(initialAgents());
-    setResults({ rootCause: null, proposedFix: null, verificationResult: null });
-    setInvestigationStatus('PENDING');
+    resetRunState();
+
+    const scenario = scenarios.find(s => s.id === selectedScenarioId);
+    const title = scenario?.title ?? 'API Database Connection Failure';
 
     try {
-      const res = await fetch('/api/investigations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: 'API Database Connection Failure' }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      const json = (await res.json()) as { investigation_id: string; status: string };
-      setInvestigationId(json.investigation_id);
-      setInvestigationStatus(json.status);
-      connectSSE(json.investigation_id);
+      const created = await startInvestigation(title);
+      setInvestigationId(created.investigation_id);
+      await runDemo(created.investigation_id, selectedScenarioId);
+      setInvestigationStatus('RUNNING');
+      connectSSE(created.investigation_id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start investigation');
       setInvestigationStatus('FAILED');
     } finally {
       setIsStarting(false);
     }
-  }, [connectSSE]);
+  }, [connectSSE, resetRunState, scenarios, selectedScenarioId]);
 
-  // ── Re-run demo ───────────────────────────────
-
-  const handleRerun = useCallback(async () => {
-    if (!investigationId) { await handleRunDemo(); return; }
-    setError(null);
-    setAgents(initialAgents());
-    setResults({ rootCause: null, proposedFix: null, verificationResult: null });
-    setInvestigationStatus('PENDING');
-    setIsStarting(true);
-    try {
-      const res = await fetch(`/api/investigations/${investigationId}/run-demo`, { method: 'POST' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setInvestigationStatus('RUNNING');
-      connectSSE(investigationId);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to re-run');
-      setInvestigationStatus('FAILED');
-    } finally {
-      setIsStarting(false);
-    }
-  }, [investigationId, connectSSE, handleRunDemo]);
-
-  // ── Derived: agentStates map for graph ───────
+  const handleInvestigationStarted = useCallback((invId: string) => {
+    setShowIncidentInput(false);
+    resetRunState();
+    setInvestigationId(invId);
+    setInvestigationStatus('RUNNING');
+    connectSSE(invId);
+  }, [connectSSE, resetRunState]);
 
   const agentStates: Record<string, AgentStatus> = {};
-  for (const [name, info] of Object.entries(agents)) {
-    agentStates[name] = info.status;
+  for (const [name, agent] of Object.entries(agents)) {
+    agentStates[name] = agent.status;
   }
 
-  const isResolved  = investigationStatus === 'COMPLETE';
-  const neverRun    = investigationStatus === '';
+  const isResolved = investigationStatus === 'COMPLETE';
+  const neverRun = investigationStatus === '';
   const statusLabel = investigationStatusLabel(investigationStatus);
-
-  // Determine which button action to use
-  const handleButtonClick = neverRun || isResolved || investigationStatus === 'FAILED'
-    ? handleRunDemo
-    : handleRerun;
+  const selectedAgentData = selectedAgent ? agents[selectedAgent] : null;
 
   const buttonLabel = isStarting ? '⏳ Starting…'
-    : isActive   ? '⚡ Running…'
+    : isActive ? '⚡ Running…'
     : isResolved ? '🔄 Run Again'
     : '▶ Run Demo';
 
-  // ─────────────────────────────────────────────
-  // Render
-  // ─────────────────────────────────────────────
-
   return (
     <div className="app">
-      {/* Header */}
       <header className="app-header">
         <span className="app-header__spider" aria-hidden="true">🕷️</span>
         <h1 className="app-header__title">
@@ -281,99 +299,125 @@ export default function App() {
         <span className="app-header__subtitle">Agentic Incident Response</span>
       </header>
 
-      <main className="app-main">
-        {/* Control bar */}
-        <div className="control-bar">
-          <button
-            className="btn-run"
-            onClick={handleButtonClick}
-            disabled={isActive || isStarting}
-            aria-busy={isActive}
-          >
-            {buttonLabel}
-          </button>
+      <div className="app-shell">
+        <InvestigationHistory
+          selectedId={investigationId}
+          onSelect={loadInvestigation}
+        />
 
-          {statusLabel && (
-            <div className="status-badge">
-              <span className={statusDotClass(investigationStatus)} aria-hidden="true" />
-              {statusLabel}
-            </div>
-          )}
+        <main className="app-main">
+          <div className="control-bar">
+            <select
+              className="scenario-select"
+              value={selectedScenarioId}
+              onChange={e => setSelectedScenarioId(e.target.value)}
+              disabled={isActive || isStarting}
+              aria-label="Demo scenario"
+            >
+              {scenarios.map(s => (
+                <option key={s.id} value={s.id}>{s.title}</option>
+              ))}
+            </select>
 
-          {error && (
-            <span style={{ fontSize: 12, color: 'var(--accent-red)' }} role="alert">
-              ⚠ {error}
-            </span>
-          )}
-        </div>
+            <button
+              className="btn-run"
+              onClick={handleRunDemo}
+              disabled={isActive || isStarting}
+              aria-busy={isActive}
+            >
+              {buttonLabel}
+            </button>
 
-        {/* Pipeline graph */}
-        <section className="graph-panel" aria-label="Pipeline visualization">
-          <div className="panel-title">Pipeline</div>
-          <OrchestrationGraph
-            agentStates={agentStates}
-            investigationStatus={investigationStatus}
-          />
-        </section>
+            <button
+              className="btn-secondary"
+              onClick={() => setShowIncidentInput(v => !v)}
+              disabled={isActive || isStarting}
+            >
+              {showIncidentInput ? 'Hide Incident Form' : '📝 Custom Incident'}
+            </button>
 
-        {/* Agent cards */}
-        <section aria-label="Agent status">
-          <div className="panel-title">Scouts</div>
-          <div className="agents-grid">
-            {SCOUT_AGENTS.map(name => (
-              <AgentCard key={name} name={name} info={agents[name]} />
-            ))}
+            {statusLabel && (
+              <div className="status-badge">
+                <span className={statusDotClass(investigationStatus)} aria-hidden="true" />
+                {statusLabel}
+              </div>
+            )}
+
+            {error && (
+              <span className="control-bar__error" role="alert">⚠ {error}</span>
+            )}
           </div>
-        </section>
 
-        {/* Results */}
-        {(results.rootCause || results.proposedFix || results.verificationResult) && (
-          <section className="results-panel" aria-label="Investigation results">
-            <div className="panel-title">Findings</div>
+          {showIncidentInput && (
+            <IncidentInput
+              onInvestigationStarted={handleInvestigationStarted}
+              disabled={isActive || isStarting}
+            />
+          )}
 
-            {results.rootCause && (
-              <div className="result-block result-block--root-cause">
-                <div className="result-block__label result-block__label--root-cause">Root Cause</div>
-                <p className="result-block__text">{results.rootCause}</p>
-              </div>
-            )}
-
-            {results.proposedFix && (
-              <div className="result-block result-block--fix">
-                <div className="result-block__label result-block__label--fix">Proposed Fix</div>
-                <p className="result-block__text">{results.proposedFix}</p>
-              </div>
-            )}
-
-            {results.verificationResult && (
-              <div className="result-block result-block--verification">
-                <div className="result-block__label result-block__label--verification">Verification</div>
-                <p className="result-block__text">{results.verificationResult}</p>
-              </div>
-            )}
+          <section className="graph-panel" aria-label="Pipeline visualization">
+            <div className="panel-title">Pipeline</div>
+            <OrchestrationGraph
+              agentStates={agentStates}
+              investigationStatus={investigationStatus}
+              selectedAgent={selectedAgent}
+              onAgentClick={setSelectedAgent}
+            />
           </section>
-        )}
 
-        {/* Resolved banner */}
-        {isResolved && (
-          <div className="resolved-banner" role="status">
-            <span className="resolved-banner__icon" aria-hidden="true">✅</span>
-            <div>
-              <div className="resolved-banner__title">Incident Resolved</div>
-              <div className="resolved-banner__sub">
-                Investigation complete · Click <strong>Run Again</strong> to replay
+          <section aria-label="Agent status">
+            <div className="panel-title">Scouts</div>
+            <div className="agents-grid">
+              {SCOUT_AGENTS.map(name => (
+                <AgentCard key={name} name={name} agent={agents[name]} />
+              ))}
+            </div>
+          </section>
+
+          {selectedAgentData && (
+            <EvidenceExplorer
+              agentName={selectedAgent!}
+              findings={selectedAgentData.findings}
+              evidence={selectedAgentData.evidence}
+            />
+          )}
+
+          <ResultsPanels
+            state={results}
+            onFixApprove={() => setFixDecision('approved')}
+            onFixReject={() => setFixDecision('rejected')}
+          />
+
+          {fixDecision === 'approved' && (
+            <div className="fix-decision fix-decision--approved" role="status">
+              Fix approved — preview only; no files were modified.
+            </div>
+          )}
+          {fixDecision === 'rejected' && (
+            <div className="fix-decision fix-decision--rejected" role="status">
+              Fix rejected — investigation results preserved for review.
+            </div>
+          )}
+
+          {isResolved && (
+            <div className="resolved-banner" role="status">
+              <span className="resolved-banner__icon" aria-hidden="true">✅</span>
+              <div>
+                <div className="resolved-banner__title">Incident Resolved</div>
+                <div className="resolved-banner__sub">
+                  Investigation complete · Select a scenario and click <strong>Run Demo</strong> to replay
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Empty state before first run */}
-        {neverRun && (
-          <div className="empty-state">
-            Click <strong>Run Demo</strong> to start the agentic investigation pipeline.
-          </div>
-        )}
-      </main>
+          {neverRun && !showIncidentInput && (
+            <div className="empty-state">
+              Choose a demo scenario or paste a custom incident to start the agentic investigation pipeline.
+            </div>
+          )}
+        </main>
+      </div>
     </div>
   );
 }

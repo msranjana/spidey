@@ -29,7 +29,8 @@ from models import AgentStatus, InvestigationStatus
 
 @pytest.fixture()
 def client() -> TestClient:
-    return TestClient(app)
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 # ---------------------------------------------------------------------------
@@ -232,11 +233,9 @@ def test_stream_opens(client: TestClient) -> None:
     create_resp = client.post("/api/investigations", json={"title": "Stream test"})
     inv_id = create_resp.json()["investigation_id"]
 
-    # Use stream=True so TestClient doesn't buffer the whole body
     with client.stream("GET", f"/api/investigations/{inv_id}/stream") as resp:
         assert resp.status_code == 200
         assert "text/event-stream" in resp.headers["content-type"]
-        # Read the first line (the connection comment)
         first_line = next(resp.iter_lines())
         assert first_line == ": connected"
 

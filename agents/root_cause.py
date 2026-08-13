@@ -55,18 +55,50 @@ class RootCauseAgent(BaseAgent):
                 f"exhaustion and {log_evidence.get('error_count', 847)} API failures."
             )
             confidence = 0.97
+            severity = "critical"
+            affected_component = "PostgreSQL / postgres-0 (StatefulSet)"
         else:
             root_cause = "Partial correlation — manual review required."
             confidence = 0.50
+            severity = "medium"
+            affected_component = "Unknown — insufficient correlation"
+
+        contributing_evidence = [
+            {
+                "source": "Infra Scout",
+                "finding": f"PVC disk usage at {disk_pct}% (threshold {self._DISK_THRESHOLD}%)",
+                "relevance": 0.95 if disk_trigger else 0.30,
+            },
+            {
+                "source": "Infra Scout",
+                "finding": f"Pod status: {pod_status}",
+                "relevance": 0.90 if crash_trigger else 0.25,
+            },
+            {
+                "source": "Log Scout",
+                "finding": f"Critical pattern: {log_pattern} ({log_evidence.get('error_count', 847)} errors)",
+                "relevance": 0.88 if conn_trigger else 0.20,
+            },
+            {
+                "source": "Code Hunter",
+                "finding": "db_pool.connect() lacks timeout; no pool exhaustion handling",
+                "relevance": 0.72,
+            },
+        ]
 
         findings = [
             root_cause,
             f"Confidence score: {confidence:.0%}",
+            f"Severity: {severity}",
+            f"Affected component: {affected_component}",
             "Cascade chain: disk full → postgres crash → pool exhausted → API 500s",
         ]
 
         evidence: dict[str, Any] = {
             "confidence": confidence,
+            "severity": severity,
+            "affected_component": affected_component,
+            "contributing_evidence": contributing_evidence,
             "root_cause_summary": root_cause,
             "triggers": {
                 "disk_exhaustion": disk_trigger,

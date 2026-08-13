@@ -116,31 +116,41 @@ class AgentOrchestrator:
         fix_result = results.get("Fix")
         verification_result = results.get("Verification")
 
+        rc_evidence = root_cause_result.evidence if root_cause_result else {}
+        fix_evidence = fix_result.evidence if fix_result else {}
+        ver_evidence = verification_result.evidence if verification_result else {}
+
         return {
             "investigation_id": investigation_id,
             "started_at": started_at.isoformat(),
             "completed_at": datetime.utcnow().isoformat(),
             "agents": {name: res.to_dict() for name, res in results.items()},
             "root_cause": (
-                root_cause_result.evidence.get("root_cause_summary")
+                rc_evidence.get("root_cause_summary")
                 if root_cause_result and root_cause_result.status == AgentStatus.COMPLETE
                 else None
             ),
             "confidence": (
-                root_cause_result.evidence.get("confidence")
+                rc_evidence.get("confidence")
                 if root_cause_result and root_cause_result.status == AgentStatus.COMPLETE
                 else None
             ),
+            "severity": rc_evidence.get("severity"),
+            "affected_component": rc_evidence.get("affected_component"),
+            "contributing_evidence": rc_evidence.get("contributing_evidence", []),
             "proposed_fix": (
                 fix_result.findings[0]
                 if fix_result and fix_result.findings
                 else None
             ),
+            "proposed_fix_diff": fix_evidence.get("proposed_fix_diff"),
+            "fix_steps": fix_evidence.get("fix_steps", []),
             "verification_verdict": (
-                verification_result.evidence.get("verdict")
+                ver_evidence.get("verdict")
                 if verification_result and verification_result.status == AgentStatus.COMPLETE
                 else None
             ),
+            "verification_checks": ver_evidence.get("verification_checks", []),
             "status": "COMPLETE" if all(
                 r.status == AgentStatus.COMPLETE for r in results.values()
             ) else "PARTIAL",
