@@ -1,6 +1,6 @@
 # Spider-Sense
 
-Agentic incident-response tool — hackathon MVP.
+Agentic incident-response tool - MVP.
 
 ## Architecture
 
