@@ -1,0 +1,283 @@
+/* ResultsPanels — Spider-Sense v2 result panels */
+
+.results-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.result-panel {
+  background: var(--bg-card, #1e293b);
+  border: 1px solid var(--border, #334155);
+  border-radius: var(--radius-md, 10px);
+  padding: 14px 16px;
+  animation: slide-in 0.3s ease;
+}
+
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.result-panel--root-cause   { border-left: 3px solid var(--accent-amber, #f59e0b); }
+.result-panel--fix          { border-left: 3px solid var(--accent-purple, #7c3aed); }
+.result-panel--verification { border-left: 3px solid var(--accent-green, #22c55e); }
+
+.result-panel__label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 10px;
+}
+
+.result-panel__label--root-cause   { color: var(--accent-amber, #f59e0b); }
+.result-panel__label--fix          { color: #a78bfa; }
+.result-panel__label--verification { color: var(--accent-green, #22c55e); }
+
+/* Root cause panel */
+
+.root-cause-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.severity-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.severity-badge--critical { color: #fecaca; background: rgba(239, 68, 68, 0.22); }
+.severity-badge--high     { color: #fed7aa; background: rgba(249, 115, 22, 0.22); }
+.severity-badge--medium   { color: #fde68a; background: rgba(245, 158, 11, 0.22); }
+.severity-badge--low      { color: #bbf7d0; background: rgba(34, 197, 94, 0.18); }
+
+.affected-component {
+  font-size: 12px;
+  color: var(--text-secondary, #94a3b8);
+}
+
+.affected-component strong {
+  color: var(--text-primary, #f1f5f9);
+  font-weight: 600;
+}
+
+.confidence-bar {
+  margin-bottom: 12px;
+}
+
+.confidence-bar__header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-secondary, #94a3b8);
+  margin-bottom: 4px;
+}
+
+.confidence-bar__track {
+  height: 6px;
+  background: var(--border, #334155);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.confidence-bar__fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.confidence-bar__fill--high   { background: var(--accent-green, #22c55e); }
+.confidence-bar__fill--medium { background: var(--accent-amber, #f59e0b); }
+.confidence-bar__fill--low    { background: var(--accent-red, #ef4444); }
+
+.root-cause-text {
+  font-size: 13px;
+  color: var(--text-primary, #f1f5f9);
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+
+.contributing-evidence {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.contributing-evidence__item {
+  font-size: 11px;
+  color: var(--text-secondary, #94a3b8);
+  border-left: 2px solid var(--accent-purple, #7c3aed);
+  padding-left: 8px;
+  line-height: 1.4;
+}
+
+.contributing-evidence__source {
+  font-weight: 600;
+  color: var(--text-primary, #f1f5f9);
+}
+
+.contributing-evidence__relevance {
+  font-size: 10px;
+  color: var(--text-muted, #475569);
+  margin-left: 6px;
+}
+
+/* Fix preview panel */
+
+.fix-steps {
+  list-style: decimal;
+  padding-left: 18px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fix-steps__item {
+  font-size: 12px;
+  color: var(--text-secondary, #94a3b8);
+  line-height: 1.4;
+}
+
+.diff-viewer {
+  background: #0f172a;
+  border: 1px solid var(--border, #334155);
+  border-radius: var(--radius-sm, 6px);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+  max-height: 200px;
+}
+
+.diff-viewer pre {
+  margin: 0;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.diff-line--add { color: #86efac; }
+.diff-line--del { color: #fca5a5; }
+.diff-line--hdr { color: #93c5fd; }
+.diff-line--ctx { color: var(--text-secondary, #94a3b8); }
+
+.fix-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.fix-actions__note {
+  font-size: 11px;
+  color: var(--text-muted, #475569);
+  margin-left: auto;
+}
+
+.btn-approve,
+.btn-reject {
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--radius-sm, 6px);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.btn-approve:disabled,
+.btn-reject:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-approve {
+  background: rgba(34, 197, 94, 0.18);
+  color: var(--accent-green, #22c55e);
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.btn-approve:not(:disabled):hover {
+  background: rgba(34, 197, 94, 0.28);
+}
+
+.btn-reject {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--accent-red, #ef4444);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.btn-reject:not(:disabled):hover {
+  background: rgba(239, 68, 68, 0.22);
+}
+
+.fix-decision {
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.fix-decision--approved { color: var(--accent-green, #22c55e); }
+.fix-decision--rejected { color: var(--accent-red, #ef4444); }
+
+/* Verification panel */
+
+.verification-checklist {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.verification-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12px;
+  padding: 8px 10px;
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: var(--radius-sm, 6px);
+}
+
+.verification-check__icon {
+  font-size: 14px;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.verification-check__icon--pass { color: var(--accent-green, #22c55e); }
+.verification-check__icon--fail { color: var(--accent-red, #ef4444); }
+.verification-check__icon--warn { color: var(--accent-amber, #f59e0b); }
+
+.verification-check__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.verification-check__name {
+  font-weight: 600;
+  color: var(--text-primary, #f1f5f9);
+}
+
+.verification-check__message {
+  color: var(--text-secondary, #94a3b8);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.verification-summary {
+  font-size: 12px;
+  color: var(--text-secondary, #94a3b8);
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border, #334155);
+}

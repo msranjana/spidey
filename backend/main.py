@@ -63,9 +63,8 @@ async def health() -> dict:
 
 @app.post("/api/investigations", response_model=StartInvestigationResponse, status_code=201)
 async def start_investigation(body: StartInvestigationRequest = StartInvestigationRequest()) -> StartInvestigationResponse:
-    """Create and immediately start a new investigation."""
+    """Create a new investigation (starts when the client opens the SSE stream)."""
     state = manager.create(title=body.title)
-    asyncio.create_task(manager.run_investigation(state.id))
     return StartInvestigationResponse(
         investigation_id=state.id,
         status=state.status,

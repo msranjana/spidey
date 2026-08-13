@@ -24,11 +24,72 @@ function emptyState(id: string): InvestigationState {
     status: InvestigationStatus.PENDING,
     agents: {},
     root_cause: null,
+    confidence: null,
+    severity: null,
+    affected_component: null,
+    contributing_evidence: [],
     proposed_fix: null,
+    proposed_fix_diff: null,
+    fix_steps: [],
     verification_result: null,
+    verification_checks: [],
     timeline: [],
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
+  };
+}
+
+function mergeInvestigationFields(
+  prev: InvestigationState,
+  d: Record<string, unknown>,
+): InvestigationState {
+  return {
+    ...prev,
+    updated_at: new Date().toISOString(),
+    status: (d.status as InvestigationStatus) ?? prev.status,
+    root_cause:
+      d.root_cause !== undefined
+        ? (d.root_cause as string | null)
+        : prev.root_cause,
+    confidence:
+      d.confidence !== undefined
+        ? (d.confidence as number | null)
+        : prev.confidence,
+    severity:
+      d.severity !== undefined
+        ? (d.severity as string | null)
+        : prev.severity,
+    affected_component:
+      d.affected_component !== undefined
+        ? (d.affected_component as string | null)
+        : prev.affected_component,
+    contributing_evidence:
+      d.contributing_evidence !== undefined
+        ? (d.contributing_evidence as InvestigationState['contributing_evidence'])
+        : prev.contributing_evidence,
+    proposed_fix:
+      d.proposed_fix !== undefined
+        ? (d.proposed_fix as string | null)
+        : prev.proposed_fix,
+    proposed_fix_diff:
+      d.proposed_fix_diff !== undefined
+        ? (d.proposed_fix_diff as string | null)
+        : prev.proposed_fix_diff,
+    fix_steps:
+      d.fix_steps !== undefined
+        ? (d.fix_steps as string[])
+        : prev.fix_steps,
+    verification_result:
+      d.verification_result !== undefined
+        ? (d.verification_result as string | null)
+        : prev.verification_result,
+    verification_checks:
+      d.verification_checks !== undefined
+        ? (d.verification_checks as InvestigationState['verification_checks'])
+        : prev.verification_checks,
+    timeline: d.timeline
+      ? (d.timeline as InvestigationState['timeline'])
+      : prev.timeline,
   };
 }
 
@@ -83,9 +144,10 @@ export function useInvestigation(): UseInvestigationReturn {
       switch (event.type) {
         case 'agent_update': {
           const agentData = event.data as Partial<AgentResult> & {
+            agent?: string;
             agent_name?: string;
           };
-          const name = agentData.agent_name;
+          const name = agentData.agent ?? agentData.agent_name;
           if (!name) return prev;
 
           return {
@@ -107,34 +169,13 @@ export function useInvestigation(): UseInvestigationReturn {
         }
 
         case 'investigation_update': {
-          const d = event.data;
-          return {
-            ...prev,
-            updated_at: new Date().toISOString(),
-            status:
-              (d.status as InvestigationStatus) ?? prev.status,
-            root_cause:
-              d.root_cause !== undefined
-                ? (d.root_cause as string | null)
-                : prev.root_cause,
-            proposed_fix:
-              d.proposed_fix !== undefined
-                ? (d.proposed_fix as string | null)
-                : prev.proposed_fix,
-            verification_result:
-              d.verification_result !== undefined
-                ? (d.verification_result as string | null)
-                : prev.verification_result,
-            timeline: d.timeline
-              ? (d.timeline as InvestigationState['timeline'])
-              : prev.timeline,
-          };
+          return mergeInvestigationFields(prev, event.data);
         }
 
         case 'complete': {
           const full = event.data as Partial<InvestigationState>;
           return {
-            ...prev,
+            ...mergeInvestigationFields(prev, event.data),
             ...full,
             status: InvestigationStatus.COMPLETE,
             updated_at: new Date().toISOString(),

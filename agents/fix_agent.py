@@ -31,6 +31,26 @@ class FixAgent(BaseAgent):
             "Step 5 — Add pool timeout: set DB_POOL_TIMEOUT=30 in app config",
         ]
 
+        fix_steps = [
+            "Reclaim disk space with vacuumdb on postgres-0",
+            "Expand postgres-pvc from 10Gi to 50Gi",
+            "Rollout restart statefulset/postgres",
+            "Set DB_POOL_SIZE=50 in application config",
+            "Set DB_POOL_TIMEOUT=30 in application config",
+        ]
+
+        proposed_fix_diff = (
+            "--- a/config/app.env\n"
+            "+++ b/config/app.env\n"
+            "@@ -1,4 +1,4 @@\n"
+            " DATABASE_URL=postgres://app:***@postgres:5432/appdb\n"
+            "-DB_POOL_SIZE=10\n"
+            "+DB_POOL_SIZE=50\n"
+            "-DB_POOL_TIMEOUT=\n"
+            "+DB_POOL_TIMEOUT=30\n"
+            " LOG_LEVEL=info\n"
+        )
+
         findings = steps + [
             "Estimated remediation time: 5 minutes",
             "Risk assessment: LOW — all changes are reversible",
@@ -38,6 +58,8 @@ class FixAgent(BaseAgent):
 
         evidence: dict[str, Any] = {
             "step_count": len(steps),
+            "fix_steps": fix_steps,
+            "proposed_fix_diff": proposed_fix_diff,
             "risk": "low",
             "estimated_minutes": 5,
             "reversible": True,

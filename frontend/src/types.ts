@@ -31,14 +31,33 @@ export interface TimelineEvent {
   data: Record<string, unknown>;
 }
 
+export interface ContributingEvidence {
+  source: string;
+  finding: string;
+  relevance: number;
+}
+
+export interface VerificationCheck {
+  name: string;
+  status: string; // pass | fail | warn
+  message: string;
+}
+
 export interface InvestigationState {
   id: string;
   title: string;
   status: InvestigationStatus;
   agents: Record<string, AgentResult>;
   root_cause: string | null;
+  confidence: number | null;
+  severity: string | null;
+  affected_component: string | null;
+  contributing_evidence: ContributingEvidence[];
   proposed_fix: string | null;
+  proposed_fix_diff: string | null;
+  fix_steps: string[];
   verification_result: string | null;
+  verification_checks: VerificationCheck[];
   timeline: TimelineEvent[];
   created_at: string;
   updated_at: string;
@@ -70,14 +89,28 @@ export interface InvestigationUpdatePayload {
   status: string;
   message?: string;
   root_cause?: string;
+  confidence?: number;
+  severity?: string;
+  affected_component?: string;
+  contributing_evidence?: ContributingEvidence[];
   proposed_fix?: string;
+  proposed_fix_diff?: string;
+  fix_steps?: string[];
   verification_result?: string;
+  verification_checks?: VerificationCheck[];
 }
 
 /** Payload from SSE `complete` events */
 export interface CompletePayload {
   investigation_id: string;
   root_cause: string;
+  confidence?: number;
+  severity?: string;
+  affected_component?: string;
+  contributing_evidence?: ContributingEvidence[];
   proposed_fix: string;
+  proposed_fix_diff?: string;
+  fix_steps?: string[];
   verification_result: string;
+  verification_checks?: VerificationCheck[];
 }
