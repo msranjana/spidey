@@ -18,6 +18,7 @@
  *   COMPLETE  → everything COMPLETE
  */
 
+import { useState, type KeyboardEvent } from 'react';
 import './OrchestrationGraph.css';
 import { AgentStatus } from '../types';
 
@@ -28,6 +29,10 @@ import { AgentStatus } from '../types';
 export interface OrchestrationGraphProps {
   agentStates: Record<string, AgentStatus>;
   investigationStatus: string;
+  /** Currently selected scout agent name (controlled by parent). */
+  selectedAgent?: string | null;
+  /** Called when a scout node is clicked; parent can update selectedAgent. */
+  onAgentClick?: (agentName: string) => void;
 }
 
 // ─────────────────────────────────────────────
@@ -113,9 +118,10 @@ const STATUS_GLOW: Record<AgentStatus, string> = {
   [AgentStatus.FAILED]:   '#ef4444',
 };
 
-// ─────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────
+/** Resolve the name passed to onAgentClick / selectedAgent for a node. */
+function nodeAgentName(node: NodeDef): string {
+  return node.agentKey ?? node.label;
+}
 
 function nodeById(id: NodeId): NodeDef {
   return NODES.find(n => n.id === id)!;
@@ -140,17 +146,18 @@ function shortenLine(
 
 /**
  * Edge visual state:
- *  'active'   → target node is RUNNING  (animated purple data flow)
+ *  'active'   → source or target node is RUNNING (animated pulse)
  *  'complete' → target node is COMPLETE (solid green)
- *  'idle'     → otherwise               (dashed grey)
+ *  'idle'     → otherwise (dashed grey)
  */
 function computeEdgeState(
   edge: EdgeDef,
   getStatus: (id: NodeId) => AgentStatus,
 ): 'idle' | 'active' | 'complete' {
-  const s = getStatus(edge.to);
-  if (s === AgentStatus.COMPLETE) return 'complete';
-  if (s === AgentStatus.RUNNING)  return 'active';
+  const srcStatus = getStatus(edge.from);
+  const dstStatus = getStatus(edge.to);
+  if (dstStatus === AgentStatus.COMPLETE) return 'complete';
+  if (srcStatus === AgentStatus.RUNNING || dstStatus === AgentStatus.RUNNING) return 'active';
   return 'idle';
 }
 
@@ -161,9 +168,22 @@ function computeEdgeState(
 interface NodeProps {
   node: NodeDef;
   status: AgentStatus;
+  isSelected: boolean;
+  isClickable: boolean;
+  onClick?: () => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }
 
-function GraphNode({ node, status }: NodeProps) {
+function GraphNode({
+  node,
+  status,
+  isSelected,
+  isClickable,
+  onClick,
+  onMouseEnter,
+  onMouseLeave,
+}: NodeProps) {
   const fill       = STATUS_COLOR[status];
   const glow       = STATUS_GLOW[status];
   const isRunning  = status === AgentStatus.RUNNING;
@@ -179,8 +199,39 @@ function GraphNode({ node, status }: NodeProps) {
   const ckEX = node.cx + arm * 1.1;
   const ckEY = node.cy - arm * 0.7;
 
+  const nodeClass = [
+    'ograph-node',
+    isClickable ? 'ograph-node--clickable' : '',
+    isSelected ? 'ograph-node--selected' : '',
+  ].filter(Boolean).join(' ');
+
   return (
-    <g className="ograph-node" role="img" aria-label={`${node.label}: ${status}`}>
+    <g
+      className={nodeClass}
+      role={isClickable ? 'button' : 'img'}
+      aria-label={`${node.label}: ${status}`}
+      aria-pressed={isClickable ? isSelected : undefined}
+      tabIndex={isClickable ? 0 : undefined}
+      onClick={isClickable ? onClick : undefined}
+      onKeyDown={isClickable ? (e: KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick?.();
+        }
+      } : undefined}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      {/* Selected highlight ring */}
+      {isSelected && (
+        <circle
+          cx={node.cx}
+          cy={node.cy}
+          r={R + 8}
+          className="ograph-selected-ring"
+        />
+      )}
+
       {/* Animated pulse ring — only when RUNNING */}
       <circle
         cx={node.cx}
@@ -189,6 +240,16 @@ function GraphNode({ node, status }: NodeProps) {
         className={`ograph-pulse-ring${isRunning ? ' ograph-pulse-ring--active' : ''}`}
         stroke={glow}
       />
+
+      {/* Hit target for scout clicks */}
+      {isClickable && (
+        <circle
+          cx={node.cx}
+          cy={node.cy}
+          r={R + 4}
+          className="ograph-node-hit"
+        />
+      )}
 
       {/* Main circle */}
       <circle
@@ -251,6 +312,28 @@ function GraphEdge({ edge, state, markerId }: EdgeProps) {
   );
 }
 
+interface TooltipProps {
+  label: string;
+  status: AgentStatus;
+  leftPct: number;
+  topPct: number;
+}
+
+function GraphTooltip({ label, status, leftPct, topPct }: TooltipProps) {
+  return (
+    <div
+      className="ograph-tooltip"
+      style={{ left: `${leftPct}%`, top: `${topPct}%` }}
+      role="tooltip"
+    >
+      <span className="ograph-tooltip__label">{label}</span>
+      <span className={`ograph-tooltip__status ograph-tooltip__status--${status.toLowerCase()}`}>
+        {status}
+      </span>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────
 // Status inference helpers
 // ─────────────────────────────────────────────
@@ -273,7 +356,10 @@ function allScoutsDone(agentStates: Record<string, AgentStatus>): boolean {
 export default function OrchestrationGraph({
   agentStates,
   investigationStatus: invStatus,
+  selectedAgent = null,
+  onAgentClick,
 }: OrchestrationGraphProps) {
+  const [hoveredAgent, setHoveredAgent] = useState<string | null>(null);
 
   /**
    * Map each graph node to an AgentStatus.
@@ -336,6 +422,10 @@ export default function OrchestrationGraph({
     return computeEdgeState(edge, getNodeStatus);
   }
 
+  const hoveredNode = hoveredAgent
+    ? NODES.find(n => nodeAgentName(n) === hoveredAgent)
+    : null;
+
   // Stage-label x positions align with node column centers
   const stageLabelX = {
     orchestrator:  90,
@@ -347,6 +437,15 @@ export default function OrchestrationGraph({
 
   return (
     <div className="ograph-wrapper">
+      {hoveredNode && (
+        <GraphTooltip
+          label={hoveredNode.label}
+          status={getNodeStatus(hoveredNode.id)}
+          leftPct={(hoveredNode.cx / W) * 100}
+          topPct={((hoveredNode.cy - R - 12) / H) * 100}
+        />
+      )}
+
       <svg
         viewBox={`0 0 ${W} ${H}`}
         className="ograph-svg"
@@ -388,13 +487,26 @@ export default function OrchestrationGraph({
         })}
 
         {/* ── Nodes ── */}
-        {NODES.map(node => (
-          <GraphNode
-            key={node.id}
-            node={node}
-            status={getNodeStatus(node.id)}
-          />
-        ))}
+        {NODES.map(node => {
+          const agentName = nodeAgentName(node);
+          const isSelected = selectedAgent === agentName;
+          const hasClickHandler = onAgentClick !== undefined;
+
+          return (
+            <GraphNode
+              key={node.id}
+              node={node}
+              status={getNodeStatus(node.id)}
+              isSelected={isSelected}
+              isClickable={hasClickHandler}
+              onClick={hasClickHandler
+                ? () => onAgentClick(agentName)
+                : undefined}
+              onMouseEnter={() => setHoveredAgent(agentName)}
+              onMouseLeave={() => setHoveredAgent(null)}
+            />
+          );
+        })}
       </svg>
     </div>
   );
