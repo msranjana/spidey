@@ -69,6 +69,13 @@ def test_start_investigation_custom_title(client: TestClient) -> None:
     assert "investigation_id" in body
 
 
+def test_create_investigation_with_start_flag_runs_pipeline(client: TestClient) -> None:
+    resp = client.post("/api/investigations?start=true", json={"title": "Auto-start"})
+    assert resp.status_code == 201
+    inv_id = resp.json()["investigation_id"]
+    assert inv_id in manager._tasks
+
+
 # ---------------------------------------------------------------------------
 # GET /api/investigations
 # ---------------------------------------------------------------------------

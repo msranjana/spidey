@@ -101,8 +101,9 @@ async def list_investigations() -> list[InvestigationSummary]:
 @app.post("/api/investigations", response_model=StartInvestigationResponse, status_code=201)
 async def create_investigation(
     body: StartInvestigationRequest = StartInvestigationRequest(),
+    start: bool = False,
 ) -> StartInvestigationResponse:
-    """Create a new investigation (does not start the pipeline)."""
+    """Create a new investigation; start the pipeline immediately when ``start=true``."""
     state = manager.create(
         title=body.title,
         logs=body.logs,
@@ -110,6 +111,8 @@ async def create_investigation(
         config_snippet=body.config_snippet,
         code_snippet=body.code_snippet,
     )
+    if start:
+        manager.start(state.id)
     return StartInvestigationResponse(
         investigation_id=state.id,
         status=state.status,

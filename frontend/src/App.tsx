@@ -11,6 +11,7 @@ import EvidenceExplorer from './components/EvidenceExplorer';
 import ResultsPanels from './components/ResultsPanels';
 import IncidentInput from './components/IncidentInput';
 import InvestigationHistory from './components/InvestigationHistory';
+import { FALLBACK_SCENARIOS } from './demoScenarios';
 import {
   getInvestigation,
   listDemoScenarios,
@@ -107,26 +108,7 @@ export default function App() {
     listDemoScenarios()
       .then(setScenarios)
       .catch(() => {
-        setScenarios([
-          {
-            id: 'api-db-connection-failure',
-            title: 'API Database Connection Failure',
-            description: 'DB connection pool exhausted',
-            severity: 'CRITICAL',
-          },
-          {
-            id: 'memory-oom-kill',
-            title: 'Memory OOM Kill',
-            description: 'Order service OOM killed',
-            severity: 'HIGH',
-          },
-          {
-            id: 'tls-certificate-expiry',
-            title: 'TLS Certificate Expiry',
-            description: 'Expired ingress certificate',
-            severity: 'HIGH',
-          },
-        ]);
+        setScenarios(FALLBACK_SCENARIOS);
       });
   }, []);
 

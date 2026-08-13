@@ -214,7 +214,7 @@ _AGENT_PROGRESS: dict[str, list[tuple[float, str, str | None]]] = {
 
 _PHASE1_AGENTS = ("Log Scout", "Code Hunter", "Infra Scout", "Security Scout")
 _PHASE2_AGENTS = ("Root Cause", "Fix", "Verification")
-_FIXTURE_AGENT_SLEEP = 0.8
+_FIXTURE_AGENT_SLEEP = 2.0
 
 
 def _agent_result_from_fixture(agent_name: str, fixture: dict[str, Any]) -> AgentResult:

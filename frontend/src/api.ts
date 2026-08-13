@@ -28,30 +28,24 @@ export function listDemoScenarios(): Promise<DemoScenario[]> {
 
 export function startInvestigation(
   input: string | StartInvestigationRequest = 'API Database Connection Failure',
+  start = false,
 ): Promise<StartInvestigationResponse> {
   const body: StartInvestigationRequest =
     typeof input === 'string'
       ? { title: input }
       : { title: 'Untitled Investigation', ...input };
 
-  return request<StartInvestigationResponse>('/api/investigations', {
+  const query = start ? '?start=true' : '';
+  return request<StartInvestigationResponse>(`/api/investigations${query}`, {
     method: 'POST',
     body: JSON.stringify(body),
   });
 }
 
-export function startInvestigationRun(id: string): Promise<{ investigation_id: string }> {
-  return request<{ investigation_id: string }>(`/api/investigations/${id}/start`, {
-    method: 'POST',
-  });
-}
-
-export async function startCustomInvestigation(
+export function startCustomInvestigation(
   payload: StartInvestigationRequest,
 ): Promise<StartInvestigationResponse> {
-  const created = await startInvestigation(payload);
-  await startInvestigationRun(created.investigation_id);
-  return created;
+  return startInvestigation(payload, true);
 }
 
 export function runDemo(
