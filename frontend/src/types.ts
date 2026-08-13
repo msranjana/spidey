@@ -62,6 +62,8 @@ export interface AgentUpdatePayload {
   status: AgentStatus;
   findings?: string[];
   evidence?: Record<string, unknown>;
+  current_task?: string;
+  duration_ms?: number;
   error?: string;
 }
 
