@@ -13,13 +13,15 @@ export interface AgentCardProps {
   agent: AgentResult;
 }
 
+const MAX_VISIBLE_FINDINGS = 3;
+
 function formatDuration(durationMs: number): string {
   if (durationMs < 1000) return `${durationMs}ms`;
   const totalSeconds = Math.floor(durationMs / 1000);
   if (totalSeconds < 60) return `${totalSeconds}s`;
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  return `${minutes}m ${seconds}s`;
+  return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
 }
 
 function idleText(status: AgentStatus): string {
@@ -30,12 +32,15 @@ function idleText(status: AgentStatus): string {
 
 export default function AgentCard({ name, agent }: AgentCardProps) {
   const statusLower = agent.status.toLowerCase();
-  const showTask =
-    agent.status === AgentStatus.RUNNING && Boolean(agent.current_task);
+  const hasTask = Boolean(agent.current_task?.trim());
+  const showTask = agent.status === AgentStatus.RUNNING && hasTask;
   const showDuration =
     agent.duration_ms != null &&
     agent.duration_ms > 0 &&
     agent.status !== AgentStatus.IDLE;
+  const findings = agent.findings ?? [];
+  const visibleFindings = findings.slice(0, MAX_VISIBLE_FINDINGS);
+  const hiddenCount = findings.length - visibleFindings.length;
 
   return (
     <div
@@ -47,41 +52,56 @@ export default function AgentCard({ name, agent }: AgentCardProps) {
         <div className="agent-card__icon" aria-hidden="true">
           {AGENT_ICONS[name] ?? '🤖'}
         </div>
-        <span className="agent-card__name">{name}</span>
+        <div className="agent-card__title">
+          <span className="agent-card__name">{name}</span>
+          {showDuration && (
+            <span className="agent-card__duration" title="Elapsed time">
+              {formatDuration(agent.duration_ms!)}
+            </span>
+          )}
+        </div>
         <span className={`agent-card__status agent-card__status--${statusLower}`}>
           {agent.status}
         </span>
       </div>
 
-      {(showTask || showDuration) && (
-        <div className="agent-card__activity">
-          {showTask && (
-            <span className="agent-card__task" aria-live="polite">
-              {agent.current_task}
-            </span>
-          )}
-          {showDuration && (
-            <span className="agent-card__duration">
-              {formatDuration(agent.duration_ms!)}
-            </span>
-          )}
+      {showTask && (
+        <div className="agent-card__task-row" aria-live="polite">
+          <span className="agent-card__label">Task</span>
+          <span className="agent-card__task">{agent.current_task}</span>
         </div>
       )}
 
-      <div className="agent-card__findings">
-        {agent.findings.length > 0 ? (
-          agent.findings.map((finding, index) => (
-            <div
-              key={`${index}-${finding.slice(0, 24)}`}
-              className="agent-card__finding agent-card__finding--live"
-              style={{ animationDelay: `${index * 80}ms` }}
-            >
-              {finding}
-            </div>
-          ))
-        ) : (
-          <span className="agent-card__idle-text">{idleText(agent.status)}</span>
-        )}
+      <div className="agent-card__findings-section">
+        <div className="agent-card__findings-header">
+          <span className="agent-card__label">Findings</span>
+          {findings.length > 0 && (
+            <span className="agent-card__findings-count">{findings.length}</span>
+          )}
+        </div>
+
+        <div className="agent-card__findings">
+          {findings.length > 0 ? (
+            <>
+              {visibleFindings.map((finding, index) => (
+                <div
+                  key={`${index}-${finding.slice(0, 24)}`}
+                  className="agent-card__finding agent-card__finding--live"
+                  style={{ animationDelay: `${index * 60}ms` }}
+                >
+                  {finding}
+                </div>
+              ))}
+              {hiddenCount > 0 && (
+                <span className="agent-card__findings-more">
+                  +{hiddenCount} more
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="agent-card__idle-text">{idleText(agent.status)}</span>
+          )}
+        </div>
       </div>
     </div>
   );
