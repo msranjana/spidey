@@ -1,25 +1,14 @@
 /**
- * OrchestrationGraph.tsx — Spider-Sense v3
+ * OrchestrationGraph.tsx — Spider-Sense technical SVG pipeline
  *
- * Technical SVG pipeline: orthogonal routing, thin strokes, no glow.
- * Directed graph showing the Spider-Sense investigation pipeline:
- *
+ * Block-diagram schematic: orthogonal bus routing, thin strokes, no glow.
  *   Orchestrator ──► [Log Scout, Code Hunter, Infra Scout, Security Scout]
- *                    (parallel fan-out)
  *                          │
- *                          ▼ (fan-in)
+ *                          ▼
  *                     Root Cause ──► Fix Agent ──► Verification
- *
- * Status transitions (backend stub pipeline):
- *   ''        → all IDLE
- *   PENDING   → orchestrator IDLE, scouts IDLE
- *   RUNNING   → orchestrator RUNNING, scouts RUNNING/COMPLETE as events arrive
- *   root_cause→ scouts COMPLETE, root_cause RUNNING
- *   fix_proposed → root_cause COMPLETE, fix_agent RUNNING; verification IDLE→RUNNING
- *   COMPLETE  → everything COMPLETE
  */
 
-import { useState } from 'react';
+import { useState, type KeyboardEvent } from 'react';
 import './OrchestrationGraph.css';
 import { AgentStatus } from '../types';
 
@@ -30,23 +19,25 @@ import { AgentStatus } from '../types';
 export interface OrchestrationGraphProps {
   agentStates: Record<string, AgentStatus>;
   investigationStatus: string;
-  /** Currently selected scout agent name (controlled by parent). */
   selectedAgent?: string | null;
-  /** Called when a scout node is clicked; parent can update selectedAgent. */
   onAgentClick?: (agentName: string) => void;
 }
 
 // ─────────────────────────────────────────────
-// Layout constants
-// SVG viewport: 860 × 340 — extra room for labels below bottom scout
+// Layout
 // ─────────────────────────────────────────────
 
 const W  = 860;
 const H  = 340;
-const R  = 20;   // node circle radius — compact technical nodes
-const LY = 18;   // stage-label y
+const LY = 18;
+
 const FANOUT_BUS_X = 175;
 const FANIN_BUS_X  = 375;
+
+const PIPE_W = 56;
+const PIPE_H = 28;
+const SCOUT_W = 72;
+const SCOUT_H = 22;
 
 type NodeId =
   | 'orchestrator'
@@ -61,25 +52,24 @@ type NodeId =
 interface NodeDef {
   id: NodeId;
   label: string;
-  /** Agent name key as sent by backend in SSE `agent_update.agent` field */
   agentKey: string | null;
   cx: number;
   cy: number;
+  w: number;
+  h: number;
 }
 
-// Scouts are spaced 70px apart, centred vertically at y=160
-// (top scout at 160-3*35=55, bottom scout at 160+3*35=265)
 const SCOUT_CY = [70, 135, 200, 265] as const;
 
 const NODES: NodeDef[] = [
-  { id: 'orchestrator',   label: 'Orchestrator',   agentKey: null,             cx: 90,  cy: 167 },
-  { id: 'log_scout',      label: 'Log Scout',       agentKey: 'Log Scout',      cx: 260, cy: SCOUT_CY[0] },
-  { id: 'code_hunter',    label: 'Code Hunter',     agentKey: 'Code Hunter',    cx: 260, cy: SCOUT_CY[1] },
-  { id: 'infra_scout',    label: 'Infra Scout',     agentKey: 'Infra Scout',    cx: 260, cy: SCOUT_CY[2] },
-  { id: 'security_scout', label: 'Security Scout',  agentKey: 'Security Scout', cx: 260, cy: SCOUT_CY[3] },
-  { id: 'root_cause',     label: 'Root Cause',      agentKey: null,             cx: 450, cy: 167 },
-  { id: 'fix_agent',      label: 'Fix Agent',       agentKey: null,             cx: 620, cy: 167 },
-  { id: 'verification',   label: 'Verification',    agentKey: null,             cx: 780, cy: 167 },
+  { id: 'orchestrator',   label: 'Orchestrator',   agentKey: null,             cx: 90,  cy: 167, w: PIPE_W,  h: PIPE_H  },
+  { id: 'log_scout',      label: 'Log Scout',       agentKey: 'Log Scout',      cx: 260, cy: SCOUT_CY[0], w: SCOUT_W, h: SCOUT_H },
+  { id: 'code_hunter',    label: 'Code Hunter',     agentKey: 'Code Hunter',    cx: 260, cy: SCOUT_CY[1], w: SCOUT_W, h: SCOUT_H },
+  { id: 'infra_scout',    label: 'Infra Scout',     agentKey: 'Infra Scout',    cx: 260, cy: SCOUT_CY[2], w: SCOUT_W, h: SCOUT_H },
+  { id: 'security_scout', label: 'Security Scout',  agentKey: 'Security Scout', cx: 260, cy: SCOUT_CY[3], w: SCOUT_W, h: SCOUT_H },
+  { id: 'root_cause',     label: 'Root Cause',      agentKey: null,             cx: 450, cy: 167, w: PIPE_W,  h: PIPE_H  },
+  { id: 'fix_agent',      label: 'Fix Agent',       agentKey: null,             cx: 620, cy: 167, w: PIPE_W,  h: PIPE_H  },
+  { id: 'verification',   label: 'Verification',    agentKey: null,             cx: 780, cy: 167, w: PIPE_W,  h: PIPE_H  },
 ];
 
 interface EdgeDef {
@@ -88,24 +78,23 @@ interface EdgeDef {
 }
 
 const EDGES: EdgeDef[] = [
-  // Fan-out: orchestrator → scouts
   { from: 'orchestrator',   to: 'log_scout'      },
   { from: 'orchestrator',   to: 'code_hunter'    },
   { from: 'orchestrator',   to: 'infra_scout'    },
   { from: 'orchestrator',   to: 'security_scout' },
-  // Fan-in: scouts → root cause
   { from: 'log_scout',      to: 'root_cause'     },
   { from: 'code_hunter',    to: 'root_cause'     },
   { from: 'infra_scout',    to: 'root_cause'     },
   { from: 'security_scout', to: 'root_cause'     },
-  // Linear pipeline
   { from: 'root_cause',     to: 'fix_agent'      },
   { from: 'fix_agent',      to: 'verification'   },
 ];
 
-// ─────────────────────────────────────────────
-// Color palette
-// ─────────────────────────────────────────────
+const SCOUT_IDS: Set<NodeId> = new Set([
+  'log_scout', 'code_hunter', 'infra_scout', 'security_scout',
+]);
+
+const STAGE_COLUMNS = [90, 260, 450, 620, 780] as const;
 
 const NODE_FILL = '#0f172a';
 
@@ -124,56 +113,24 @@ function nodeById(id: NodeId): NodeDef {
   return NODES.find(n => n.id === id)!;
 }
 
-/**
- * Shorten a line so the arrowhead tip sits at the target node's circle edge.
- * Returns [x1, y1, x2_shortened, y2_shortened].
- */
-function shortenLine(
-  x1: number, y1: number,
-  x2: number, y2: number,
-  margin: number,
-): [number, number, number, number] {
-  const dx  = x2 - x1;
-  const dy  = y2 - y1;
-  const len = Math.sqrt(dx * dx + dy * dy);
-  if (len === 0) return [x1, y1, x2, y2];
-  const ratio = (len - margin) / len;
-  return [x1, y1, x1 + dx * ratio, y1 + dy * ratio];
-}
+function nodeLeft(n: NodeDef): number { return n.cx - n.w / 2; }
+function nodeRight(n: NodeDef): number { return n.cx + n.w / 2; }
 
-const SCOUT_IDS: Set<NodeId> = new Set([
-  'log_scout', 'code_hunter', 'infra_scout', 'security_scout',
-]);
-
-/**
- * Orthogonal edge routing for a clean technical pipeline schematic.
- */
-function buildOrthoPath(edge: EdgeDef): string {
+function buildEdgePath(edge: EdgeDef): string {
   const src = nodeById(edge.from);
   const dst = nodeById(edge.to);
 
   if (edge.from === 'orchestrator' && SCOUT_IDS.has(edge.to)) {
-    const xStart = src.cx + R;
-    const xEnd   = dst.cx - R;
-    return `M ${xStart} ${src.cy} H ${FANOUT_BUS_X} V ${dst.cy} H ${xEnd}`;
+    return `M ${nodeRight(src)} ${src.cy} H ${FANOUT_BUS_X} V ${dst.cy} H ${nodeLeft(dst)}`;
   }
 
   if (SCOUT_IDS.has(edge.from) && edge.to === 'root_cause') {
-    const xStart = src.cx + R;
-    const xEnd   = dst.cx - R;
-    return `M ${xStart} ${src.cy} H ${FANIN_BUS_X} V ${dst.cy} H ${xEnd}`;
+    return `M ${nodeRight(src)} ${src.cy} H ${FANIN_BUS_X} V ${dst.cy} H ${nodeLeft(dst)}`;
   }
 
-  const [x1, , x2] = shortenLine(src.cx, src.cy, dst.cx, dst.cy, R + 6);
-  return `M ${x1} ${src.cy} H ${x2}`;
+  return `M ${nodeRight(src)} ${src.cy} H ${nodeLeft(dst)}`;
 }
 
-/**
- * Edge visual state:
- *  'active'   → source or target node is RUNNING (animated pulse)
- *  'complete' → target node is COMPLETE (solid green)
- *  'idle'     → otherwise (dashed grey)
- */
 function computeEdgeState(
   edge: EdgeDef,
   getStatus: (id: NodeId) => AgentStatus,
@@ -183,6 +140,19 @@ function computeEdgeState(
   if (dstStatus === AgentStatus.COMPLETE) return 'complete';
   if (srcStatus === AgentStatus.RUNNING || dstStatus === AgentStatus.RUNNING) return 'active';
   return 'idle';
+}
+
+function busSegmentState(
+  edges: EdgeDef[],
+  getEdgeState: (e: EdgeDef) => 'idle' | 'active' | 'complete',
+): 'idle' | 'active' | 'complete' {
+  let best: 'idle' | 'active' | 'complete' = 'idle';
+  for (const e of edges) {
+    const s = getEdgeState(e);
+    if (s === 'complete') best = 'complete';
+    else if (s === 'active' && best !== 'complete') best = 'active';
+  }
+  return best;
 }
 
 // ─────────────────────────────────────────────
@@ -211,10 +181,13 @@ function GraphNode({
   const stroke     = STATUS_STROKE[status];
   const isRunning  = status === AgentStatus.RUNNING;
   const isComplete = status === AgentStatus.COMPLETE;
+  const isFailed   = status === AgentStatus.FAILED;
   const statusLow  = status.toLowerCase();
 
-  // Checkmark geometry — two-segment path inside circle
-  const arm  = R * 0.33;
+  const x = nodeLeft(node);
+  const y = node.cy - node.h / 2;
+
+  const arm  = Math.min(node.w, node.h) * 0.22;
   const ckX  = node.cx - arm * 0.85;
   const ckY  = node.cy;
   const ckMX = node.cx - arm * 0.05;
@@ -236,7 +209,7 @@ function GraphNode({
       aria-pressed={isClickable ? isSelected : undefined}
       tabIndex={isClickable ? 0 : undefined}
       onClick={isClickable ? onClick : undefined}
-      onKeyDown={isClickable ? (e: React.KeyboardEvent) => {
+      onKeyDown={isClickable ? (e: KeyboardEvent) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           onClick?.();
@@ -245,55 +218,65 @@ function GraphNode({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      {/* Selected highlight ring */}
       {isSelected && (
-        <circle
-          cx={node.cx}
-          cy={node.cy}
-          r={R + 6}
+        <rect
+          x={x - 4}
+          y={y - 4}
+          width={node.w + 8}
+          height={node.h + 8}
+          rx={5}
           className="ograph-selected-ring"
         />
       )}
 
-      {/* Hit target for scout clicks */}
       {isClickable && (
-        <circle
-          cx={node.cx}
-          cy={node.cy}
-          r={R + 4}
+        <rect
+          x={x - 2}
+          y={y - 2}
+          width={node.w + 4}
+          height={node.h + 4}
           className="ograph-node-hit"
         />
       )}
 
-      {/* Main circle */}
-      <circle
-        cx={node.cx}
-        cy={node.cy}
-        r={R}
-        className="ograph-node-circle"
+      <rect
+        x={x}
+        y={y}
+        width={node.w}
+        height={node.h}
+        rx={3}
+        className="ograph-node-box"
         fill={NODE_FILL}
         stroke={stroke}
       />
 
       {isRunning && (
-        <circle
-          cx={node.cx}
-          cy={node.cy}
-          r={4}
-          className="ograph-running-dot"
+        <rect
+          x={x}
+          y={y}
+          width={3}
+          height={node.h}
+          className="ograph-running-bar"
         />
       )}
 
-      {/* Checkmark — fades in on COMPLETE */}
-      <path
-        d={`M ${ckX} ${ckY} L ${ckMX} ${ckMY} L ${ckEX} ${ckEY}`}
-        className={`ograph-checkmark${isComplete ? ' ograph-checkmark--visible' : ''}`}
-      />
+      {isComplete && (
+        <path
+          d={`M ${ckX} ${ckY} L ${ckMX} ${ckMY} L ${ckEX} ${ckEY}`}
+          className="ograph-checkmark ograph-checkmark--visible"
+        />
+      )}
 
-      {/* Label below node */}
+      {isFailed && (
+        <path
+          d={`M ${node.cx - arm} ${node.cy - arm} L ${node.cx + arm} ${node.cy + arm} M ${node.cx + arm} ${node.cy - arm} L ${node.cx - arm} ${node.cy + arm}`}
+          className="ograph-failmark ograph-failmark--visible"
+        />
+      )}
+
       <text
         x={node.cx}
-        y={node.cy + R + 15}
+        y={node.cy + node.h / 2 + 13}
         className={`ograph-node-label ograph-node-label--${statusLow}`}
       >
         {node.label}
@@ -303,12 +286,12 @@ function GraphNode({
 }
 
 interface EdgeProps {
-  edge: EdgeDef;
+  d: string;
   state: 'idle' | 'active' | 'complete';
   markerId: string;
 }
 
-function GraphEdge({ edge, state, markerId }: EdgeProps) {
+function GraphEdge({ d, state, markerId }: EdgeProps) {
   const cls = [
     'ograph-edge',
     state === 'active'   ? 'ograph-edge--active'   : '',
@@ -317,7 +300,7 @@ function GraphEdge({ edge, state, markerId }: EdgeProps) {
 
   return (
     <path
-      d={buildOrthoPath(edge)}
+      d={d}
       className={cls}
       markerEnd={`url(#${markerId})`}
     />
@@ -346,15 +329,8 @@ function GraphTooltip({ label, status, leftPct, topPct }: TooltipProps) {
   );
 }
 
-// ─────────────────────────────────────────────
-// Status inference helpers
-// ─────────────────────────────────────────────
-
 const SCOUT_KEYS = ['Log Scout', 'Code Hunter', 'Infra Scout', 'Security Scout'] as const;
 
-/**
- * Returns true when all 4 scouts have reached a terminal state.
- */
 function allScoutsDone(agentStates: Record<string, AgentStatus>): boolean {
   return SCOUT_KEYS.every(
     k => agentStates[k] === AgentStatus.COMPLETE || agentStates[k] === AgentStatus.FAILED,
@@ -373,21 +349,6 @@ export default function OrchestrationGraph({
 }: OrchestrationGraphProps) {
   const [hoveredAgent, setHoveredAgent] = useState<string | null>(null);
 
-  /**
-   * Map each graph node to an AgentStatus.
-   *
-   * Scout nodes read directly from agentStates (keyed by backend agent name).
-   * Pipeline nodes (Orchestrator, Root Cause, Fix Agent, Verification) are
-   * inferred from the investigation-level status string.
-   *
-   * Backend status progression (stub pipeline):
-   *   ''          → pre-run, everything IDLE
-   *   'PENDING'   → about to start, everything IDLE
-   *   'RUNNING'   → scouts running in parallel
-   *   'root_cause'→ scouts done, root-cause analysis in progress
-   *   'fix_proposed' → root cause done, fix agent ran, verification running
-   *   'COMPLETE'  → full pipeline done
-   */
   function getNodeStatus(nodeId: NodeId): AgentStatus {
     switch (nodeId) {
       case 'orchestrator':
@@ -396,31 +357,23 @@ export default function OrchestrationGraph({
         return AgentStatus.RUNNING;
 
       case 'root_cause':
-        // COMPLETE once fix stage begins or pipeline is done
         if (invStatus === 'fix_proposed' || invStatus === 'COMPLETE') return AgentStatus.COMPLETE;
-        // RUNNING while backend is in the root-cause phase
         if (invStatus === 'root_cause')                               return AgentStatus.RUNNING;
-        // RUNNING if all scouts just finished but root_cause event not yet received
         if (invStatus === 'RUNNING' && allScoutsDone(agentStates))    return AgentStatus.RUNNING;
         return AgentStatus.IDLE;
 
       case 'fix_agent':
         if (invStatus === 'COMPLETE')                        return AgentStatus.COMPLETE;
-        // Fix agent runs while fix_proposed status is active
-        // (backend sends fix_proposed *after* the fix is determined, so the node
-        //  is RUNNING during root_cause and COMPLETE at fix_proposed)
         if (invStatus === 'fix_proposed')                    return AgentStatus.COMPLETE;
         if (invStatus === 'root_cause')                      return AgentStatus.RUNNING;
         return AgentStatus.IDLE;
 
       case 'verification':
         if (invStatus === 'COMPLETE')                        return AgentStatus.COMPLETE;
-        // Verification is running while fix_proposed is the active phase
         if (invStatus === 'fix_proposed')                    return AgentStatus.RUNNING;
         return AgentStatus.IDLE;
 
       default: {
-        // Scout nodes — resolve from live agentStates
         const node = nodeById(nodeId);
         if (node.agentKey !== null) {
           return agentStates[node.agentKey] ?? AgentStatus.IDLE;
@@ -438,7 +391,6 @@ export default function OrchestrationGraph({
     ? NODES.find(n => n.agentKey === hoveredAgent)
     : null;
 
-  // Stage-label x positions align with node column centers
   const stageLabelX = {
     orchestrator:  90,
     scouts:       260,
@@ -447,6 +399,20 @@ export default function OrchestrationGraph({
     verify:       780,
   };
 
+  const fanoutEdges = EDGES.filter(e => e.from === 'orchestrator');
+  const faninEdges  = EDGES.filter(e => e.to === 'root_cause' && SCOUT_IDS.has(e.from));
+
+  const fanoutBusState = busSegmentState(fanoutEdges, getEdgeState);
+  const faninBusState  = busSegmentState(faninEdges, getEdgeState);
+
+  const orchestrator = nodeById('orchestrator');
+  const rootCause    = nodeById('root_cause');
+
+  const fanoutTrunkD = `M ${nodeRight(orchestrator)} ${orchestrator.cy} H ${FANOUT_BUS_X}`;
+  const faninTrunkD  = `M ${FANIN_BUS_X} ${rootCause.cy} H ${nodeLeft(rootCause)}`;
+  const fanoutBusD   = `M ${FANOUT_BUS_X} ${SCOUT_CY[0]} V ${SCOUT_CY[3]}`;
+  const faninBusD    = `M ${FANIN_BUS_X} ${SCOUT_CY[0]} V ${SCOUT_CY[3]}`;
+
   return (
     <div className="ograph-wrapper">
       {hoveredNode && hoveredNode.agentKey && (
@@ -454,7 +420,7 @@ export default function OrchestrationGraph({
           label={hoveredNode.label}
           status={getNodeStatus(hoveredNode.id)}
           leftPct={(hoveredNode.cx / W) * 100}
-          topPct={((hoveredNode.cy - R - 12) / H) * 100}
+          topPct={((hoveredNode.cy - hoveredNode.h / 2 - 10) / H) * 100}
         />
       )}
 
@@ -476,8 +442,7 @@ export default function OrchestrationGraph({
           </marker>
         </defs>
 
-        {/* Column guide lines */}
-        {[90, 260, 450, 620, 780].map(x => (
+        {STAGE_COLUMNS.map(x => (
           <line
             key={`guide-${x}`}
             x1={x}
@@ -488,28 +453,57 @@ export default function OrchestrationGraph({
           />
         ))}
 
-        {/* Stage column labels */}
         <text x={stageLabelX.orchestrator} y={LY} className="ograph-stage-label">Orchestrator</text>
         <text x={stageLabelX.scouts}       y={LY} className="ograph-stage-label">Parallel Scouts</text>
         <text x={stageLabelX.rootCause}    y={LY} className="ograph-stage-label">Root Cause</text>
         <text x={stageLabelX.fix}          y={LY} className="ograph-stage-label">Fix</text>
         <text x={stageLabelX.verify}       y={LY} className="ograph-stage-label">Verify</text>
 
-        {/* ── Edges (rendered below nodes) ── */}
-        {EDGES.map(edge => {
-          const state    = getEdgeState(edge);
-          const markerId = `arrow-${state}`;
+        {/* Bus backbone */}
+        <GraphEdge d={fanoutBusD} state={fanoutBusState} markerId="arrow-idle" />
+        <GraphEdge d={faninBusD}  state={faninBusState}  markerId="arrow-idle" />
+        <GraphEdge d={fanoutTrunkD} state={getEdgeState(fanoutEdges[0])} markerId={`arrow-${getEdgeState(fanoutEdges[0])}`} />
+        <GraphEdge d={faninTrunkD}  state={getEdgeState(faninEdges[0])}  markerId={`arrow-${getEdgeState(faninEdges[0])}`} />
+
+        {/* Scout stubs to buses */}
+        {SCOUT_IDS.size > 0 && [...SCOUT_IDS].map(id => {
+          const scout = nodeById(id);
+          const fanoutStub = `M ${FANOUT_BUS_X} ${scout.cy} H ${nodeLeft(scout)}`;
+          const faninStub  = `M ${nodeRight(scout)} ${scout.cy} H ${FANIN_BUS_X}`;
+          const fanoutEdge = EDGES.find(e => e.from === 'orchestrator' && e.to === id)!;
+          const faninEdge  = EDGES.find(e => e.from === id && e.to === 'root_cause')!;
+          const fanoutState = getEdgeState(fanoutEdge);
+          const faninState  = getEdgeState(faninEdge);
+          return (
+            <g key={`stubs-${id}`}>
+              <GraphEdge d={fanoutStub} state={fanoutState} markerId={`arrow-${fanoutState}`} />
+              <GraphEdge d={faninStub}  state={faninState}  markerId={`arrow-${faninState}`} />
+            </g>
+          );
+        })}
+
+        {/* Linear pipeline */}
+        {EDGES.filter(e => !SCOUT_IDS.has(e.from) && e.from !== 'orchestrator').map(edge => {
+          const state = getEdgeState(edge);
           return (
             <GraphEdge
               key={`${edge.from}→${edge.to}`}
-              edge={edge}
+              d={buildEdgePath(edge)}
               state={state}
-              markerId={markerId}
+              markerId={`arrow-${state}`}
             />
           );
         })}
 
-        {/* ── Nodes ── */}
+        {/* Junction dots */}
+        {[FANOUT_BUS_X, FANIN_BUS_X].map(busX => (
+          SCOUT_CY.map(cy => (
+            <circle key={`${busX}-${cy}`} cx={busX} cy={cy} r={2} className="ograph-junction" />
+          ))
+        ))}
+        <circle cx={FANOUT_BUS_X} cy={orchestrator.cy} r={2} className="ograph-junction" />
+        <circle cx={FANIN_BUS_X} cy={rootCause.cy} r={2} className="ograph-junction" />
+
         {NODES.map(node => {
           const isScout = node.agentKey !== null;
           const isSelected = isScout && selectedAgent === node.agentKey;

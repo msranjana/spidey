@@ -1,6 +1,6 @@
 /* ============================================================
-   OrchestrationGraph.css — Spider-Sense v3 technical pipeline
-   Thin strokes, orthogonal routing, no glow effects
+   OrchestrationGraph.css — technical SVG pipeline schematic
+   Block nodes, bus routing, thin strokes, no glow
    ============================================================ */
 
 .ograph-wrapper {
@@ -19,26 +19,32 @@
   overflow: visible;
 }
 
-/* ── Column guide lines ── */
+/* ── Column guides ── */
 .ograph-guide {
   stroke: #1e293b;
   stroke-width: 1;
   stroke-dasharray: 2 4;
 }
 
-/* ── Node base ── */
-.ograph-node-circle {
+/* ── Bus junction dots ── */
+.ograph-junction {
+  fill: #334155;
+  pointer-events: none;
+}
+
+/* ── Node blocks ── */
+.ograph-node-box {
   stroke-width: 1;
-  transition: fill 0.25s ease, stroke 0.25s ease;
+  transition: stroke 0.2s ease;
 }
 
 .ograph-node-label {
-  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
-  font-size: 10px;
+  font-family: 'JetBrains Mono', 'Consolas', 'Segoe UI', monospace;
+  font-size: 9px;
   fill: #64748b;
   text-anchor: middle;
   pointer-events: none;
-  transition: fill 0.25s ease;
+  transition: fill 0.2s ease;
   user-select: none;
 }
 
@@ -54,13 +60,13 @@
   fill: #dc2626;
 }
 
-/* ── Running indicator — small dot, no glow ── */
-.ograph-running-dot {
-  fill: #f59e0b;
+/* ── Running — left bar, no glow ── */
+.ograph-running-bar {
+  fill: #d97706;
   pointer-events: none;
 }
 
-/* ── Clickable scout nodes ── */
+/* ── Clickable scouts ── */
 .ograph-node--clickable {
   cursor: pointer;
 }
@@ -69,7 +75,7 @@
   outline: none;
 }
 
-.ograph-node--clickable:focus-visible .ograph-node-circle {
+.ograph-node--clickable:focus-visible .ograph-node-box {
   stroke: #60a5fa;
   stroke-width: 1.5;
 }
@@ -80,16 +86,16 @@
   pointer-events: all;
 }
 
-.ograph-node--clickable:hover .ograph-node-circle {
+.ograph-node--clickable:hover .ograph-node-box {
   stroke-width: 1.5;
 }
 
-/* ── Selected scout — static ring, no glow animation ── */
+/* ── Selected scout — static outline ── */
 .ograph-selected-ring {
   fill: none;
   stroke: #60a5fa;
   stroke-width: 1;
-  opacity: 0.85;
+  opacity: 0.8;
 }
 
 .ograph-node--selected .ograph-node-label {
@@ -97,7 +103,7 @@
   font-weight: 600;
 }
 
-/* ── Hover tooltip ── */
+/* ── Tooltip ── */
 .ograph-tooltip {
   position: absolute;
   transform: translate(-50%, -100%);
@@ -106,15 +112,15 @@
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  padding: 5px 8px;
+  padding: 4px 8px;
   background: #1e293b;
   border: 1px solid #334155;
-  border-radius: 4px;
+  border-radius: 3px;
   pointer-events: none;
 }
 
 .ograph-tooltip__label {
-  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
   font-size: 10px;
   font-weight: 600;
   color: #e2e8f0;
@@ -122,10 +128,10 @@
 }
 
 .ograph-tooltip__status {
-  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
-  font-size: 9px;
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  font-size: 8px;
   font-weight: 500;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: #94a3b8;
 }
@@ -146,7 +152,7 @@
   color: #64748b;
 }
 
-/* ── Checkmark inside completed node ── */
+/* ── Status marks ── */
 .ograph-checkmark {
   stroke: #22c55e;
   stroke-width: 1.5;
@@ -154,58 +160,59 @@
   stroke-linejoin: round;
   fill: none;
   opacity: 0;
-  transition: opacity 0.25s ease;
+  pointer-events: none;
 }
 
 .ograph-checkmark--visible {
   opacity: 1;
 }
 
-/* ── Edges — thin technical strokes ── */
+.ograph-failmark {
+  stroke: #dc2626;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  fill: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ograph-failmark--visible {
+  opacity: 1;
+}
+
+/* ── Edges — thin, static (no animated glow) ── */
 .ograph-edge {
   fill: none;
   stroke-width: 1;
   stroke: #334155;
   stroke-dasharray: 3 3;
-  transition: stroke 0.25s ease;
+  transition: stroke 0.2s ease;
 }
 
 .ograph-edge--active {
   stroke: #d97706;
-  stroke-dasharray: 4 3;
-  animation: ograph-flow 1s linear infinite;
+  stroke-dasharray: none;
 }
 
 .ograph-edge--complete {
   stroke: #16a34a;
   stroke-dasharray: none;
-  animation: none;
-}
-
-@keyframes ograph-flow {
-  from {
-    stroke-dashoffset: 14;
-  }
-  to {
-    stroke-dashoffset: 0;
-  }
 }
 
 /* ── Stage labels ── */
 .ograph-stage-label {
-  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
   font-size: 8px;
   fill: #475569;
   text-anchor: middle;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   user-select: none;
 }
 
-/* ── Arrowhead marker paths ── */
+/* ── Arrowheads ── */
 .ograph-arrow-idle {
   fill: #334155;
-  transition: fill 0.25s ease;
 }
 
 .ograph-arrow-active {
