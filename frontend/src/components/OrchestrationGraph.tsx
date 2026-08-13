@@ -1,7 +1,8 @@
 /**
- * OrchestrationGraph.tsx
+ * OrchestrationGraph.tsx — Spider-Sense v3
  *
- * SVG-based directed-graph showing the Spider-Sense investigation pipeline:
+ * Technical SVG pipeline: orthogonal routing, thin strokes, no glow.
+ * Directed graph showing the Spider-Sense investigation pipeline:
  *
  *   Orchestrator ──► [Log Scout, Code Hunter, Infra Scout, Security Scout]
  *                    (parallel fan-out)
@@ -42,8 +43,10 @@ export interface OrchestrationGraphProps {
 
 const W  = 860;
 const H  = 340;
-const R  = 26;   // node circle radius
+const R  = 20;   // node circle radius — compact technical nodes
 const LY = 18;   // stage-label y
+const FANOUT_BUS_X = 175;
+const FANIN_BUS_X  = 375;
 
 type NodeId =
   | 'orchestrator'
@@ -104,18 +107,13 @@ const EDGES: EdgeDef[] = [
 // Color palette
 // ─────────────────────────────────────────────
 
-const STATUS_COLOR: Record<AgentStatus, string> = {
-  [AgentStatus.IDLE]:     '#374151',
-  [AgentStatus.RUNNING]:  '#f59e0b',
-  [AgentStatus.COMPLETE]: '#22c55e',
-  [AgentStatus.FAILED]:   '#ef4444',
-};
+const NODE_FILL = '#0f172a';
 
-const STATUS_GLOW: Record<AgentStatus, string> = {
-  [AgentStatus.IDLE]:     'transparent',
-  [AgentStatus.RUNNING]:  '#f59e0b',
-  [AgentStatus.COMPLETE]: 'transparent',
-  [AgentStatus.FAILED]:   '#ef4444',
+const STATUS_STROKE: Record<AgentStatus, string> = {
+  [AgentStatus.IDLE]:     '#475569',
+  [AgentStatus.RUNNING]:  '#d97706',
+  [AgentStatus.COMPLETE]: '#16a34a',
+  [AgentStatus.FAILED]:   '#dc2626',
 };
 
 // ─────────────────────────────────────────────
@@ -141,6 +139,33 @@ function shortenLine(
   if (len === 0) return [x1, y1, x2, y2];
   const ratio = (len - margin) / len;
   return [x1, y1, x1 + dx * ratio, y1 + dy * ratio];
+}
+
+const SCOUT_IDS: Set<NodeId> = new Set([
+  'log_scout', 'code_hunter', 'infra_scout', 'security_scout',
+]);
+
+/**
+ * Orthogonal edge routing for a clean technical pipeline schematic.
+ */
+function buildOrthoPath(edge: EdgeDef): string {
+  const src = nodeById(edge.from);
+  const dst = nodeById(edge.to);
+
+  if (edge.from === 'orchestrator' && SCOUT_IDS.has(edge.to)) {
+    const xStart = src.cx + R;
+    const xEnd   = dst.cx - R;
+    return `M ${xStart} ${src.cy} H ${FANOUT_BUS_X} V ${dst.cy} H ${xEnd}`;
+  }
+
+  if (SCOUT_IDS.has(edge.from) && edge.to === 'root_cause') {
+    const xStart = src.cx + R;
+    const xEnd   = dst.cx - R;
+    return `M ${xStart} ${src.cy} H ${FANIN_BUS_X} V ${dst.cy} H ${xEnd}`;
+  }
+
+  const [x1, , x2] = shortenLine(src.cx, src.cy, dst.cx, dst.cy, R + 6);
+  return `M ${x1} ${src.cy} H ${x2}`;
 }
 
 /**
@@ -183,8 +208,7 @@ function GraphNode({
   onMouseEnter,
   onMouseLeave,
 }: NodeProps) {
-  const fill       = STATUS_COLOR[status];
-  const glow       = STATUS_GLOW[status];
+  const stroke     = STATUS_STROKE[status];
   const isRunning  = status === AgentStatus.RUNNING;
   const isComplete = status === AgentStatus.COMPLETE;
   const statusLow  = status.toLowerCase();
@@ -226,19 +250,10 @@ function GraphNode({
         <circle
           cx={node.cx}
           cy={node.cy}
-          r={R + 8}
+          r={R + 6}
           className="ograph-selected-ring"
         />
       )}
-
-      {/* Animated pulse ring — only when RUNNING */}
-      <circle
-        cx={node.cx}
-        cy={node.cy}
-        r={R + 5}
-        className={`ograph-pulse-ring${isRunning ? ' ograph-pulse-ring--active' : ''}`}
-        stroke={glow}
-      />
 
       {/* Hit target for scout clicks */}
       {isClickable && (
@@ -256,10 +271,18 @@ function GraphNode({
         cy={node.cy}
         r={R}
         className="ograph-node-circle"
-        fill={fill}
-        stroke={isRunning ? glow : '#1e293b'}
-        strokeWidth={isRunning ? 2.5 : 1.5}
+        fill={NODE_FILL}
+        stroke={stroke}
       />
+
+      {isRunning && (
+        <circle
+          cx={node.cx}
+          cy={node.cy}
+          r={4}
+          className="ograph-running-dot"
+        />
+      )}
 
       {/* Checkmark — fades in on COMPLETE */}
       <path
@@ -286,15 +309,6 @@ interface EdgeProps {
 }
 
 function GraphEdge({ edge, state, markerId }: EdgeProps) {
-  const src = nodeById(edge.from);
-  const dst = nodeById(edge.to);
-
-  const [x1, y1, x2, y2] = shortenLine(
-    src.cx, src.cy,
-    dst.cx, dst.cy,
-    R + 8,
-  );
-
   const cls = [
     'ograph-edge',
     state === 'active'   ? 'ograph-edge--active'   : '',
@@ -302,9 +316,8 @@ function GraphEdge({ edge, state, markerId }: EdgeProps) {
   ].filter(Boolean).join(' ');
 
   return (
-    <line
-      x1={x1} y1={y1}
-      x2={x2} y2={y2}
+    <path
+      d={buildOrthoPath(edge)}
       className={cls}
       markerEnd={`url(#${markerId})`}
     />
@@ -452,17 +465,28 @@ export default function OrchestrationGraph({
         role="img"
       >
         <defs>
-          {/* Arrowhead markers — one per edge state to avoid recoloring */}
-          <marker id="arrow-idle"     markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L6,3 z" className="ograph-arrow-idle" />
+          <marker id="arrow-idle"     markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto">
+            <path d="M0,0 L0,5 L5,2.5 z" className="ograph-arrow-idle" />
           </marker>
-          <marker id="arrow-active"   markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L6,3 z" className="ograph-arrow-active" />
+          <marker id="arrow-active"   markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto">
+            <path d="M0,0 L0,5 L5,2.5 z" className="ograph-arrow-active" />
           </marker>
-          <marker id="arrow-complete" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L6,3 z" className="ograph-arrow-complete" />
+          <marker id="arrow-complete" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto">
+            <path d="M0,0 L0,5 L5,2.5 z" className="ograph-arrow-complete" />
           </marker>
         </defs>
+
+        {/* Column guide lines */}
+        {[90, 260, 450, 620, 780].map(x => (
+          <line
+            key={`guide-${x}`}
+            x1={x}
+            y1={28}
+            x2={x}
+            y2={H - 12}
+            className="ograph-guide"
+          />
+        ))}
 
         {/* Stage column labels */}
         <text x={stageLabelX.orchestrator} y={LY} className="ograph-stage-label">Orchestrator</text>
