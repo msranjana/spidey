@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import abc
-from datetime import datetime
 from typing import Any
 
-from .models import AgentResult, AgentStatus
+from .models import AgentResult, AgentStatus, utcnow
 
 
 class BaseAgent(abc.ABC):
@@ -37,7 +36,7 @@ class BaseAgent(abc.ABC):
         result = AgentResult(
             agent_name=self.name,
             status=AgentStatus.RUNNING,
-            started_at=datetime.utcnow(),
+            started_at=utcnow(),
         )
         self.status = AgentStatus.RUNNING
         try:
@@ -51,7 +50,7 @@ class BaseAgent(abc.ABC):
             result.error = str(exc)
             self.status = AgentStatus.FAILED
         finally:
-            result.completed_at = datetime.utcnow()
+            result.completed_at = utcnow()
         return result
 
     # ------------------------------------------------------------------

@@ -18,6 +18,6 @@ _BACKEND_DIR = str(Path(__file__).resolve().parent.parent / "backend")
 if _BACKEND_DIR not in sys.path:
     sys.path.insert(0, _BACKEND_DIR)
 
-from models import AgentResult, AgentStatus  # noqa: E402
+from models import AgentResult, AgentStatus, utcnow  # noqa: E402
 
-__all__ = ["AgentResult", "AgentStatus"]
+__all__ = ["AgentResult", "AgentStatus", "utcnow"]

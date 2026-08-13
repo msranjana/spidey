@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+
+def utcnow() -> datetime:
+    """Current time as an aware UTC datetime (replaces deprecated datetime.utcnow)."""
+    return datetime.now(timezone.utc)
 
 
 class AgentStatus(str, enum.Enum):
@@ -80,8 +85,8 @@ class InvestigationState(BaseModel):
     verification_result: str | None = None
     verification_checks: list[VerificationCheck] = Field(default_factory=list)
     timeline: list[TimelineEvent] = Field(default_factory=list)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
 
 class InvestigationSummary(BaseModel):

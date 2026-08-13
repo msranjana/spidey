@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from datetime import datetime
 from typing import Any
 
 from .code_hunter import CodeHunterAgent
 from .fix_agent import FixAgent
 from .infra_scout import InfraScoutAgent
 from .log_scout import LogScoutAgent
-from .models import AgentResult, AgentStatus
+from .models import AgentResult, AgentStatus, utcnow
 from .root_cause import RootCauseAgent
 from .security_scout import SecurityScoutAgent
 from .verification import VerificationAgent
@@ -65,7 +64,7 @@ class AgentOrchestrator:
             A JSON-serialisable dict containing all agent results, root cause,
             proposed fix, verification outcome, and timing metadata.
         """
-        started_at = datetime.utcnow()
+        started_at = utcnow()
         results: dict[str, AgentResult] = {}
 
         async def _notify(result: AgentResult) -> None:
@@ -123,7 +122,7 @@ class AgentOrchestrator:
         return {
             "investigation_id": investigation_id,
             "started_at": started_at.isoformat(),
-            "completed_at": datetime.utcnow().isoformat(),
+            "completed_at": utcnow().isoformat(),
             "agents": {name: res.to_dict() for name, res in results.items()},
             "root_cause": (
                 rc_evidence.get("root_cause_summary")

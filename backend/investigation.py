@@ -45,6 +45,7 @@ from models import (  # noqa: E402
     InvestigationStatus,
     TimelineEvent,
     VerificationCheck,
+    utcnow,
 )
 
 # ---------------------------------------------------------------------------
@@ -213,7 +214,7 @@ _AGENT_PROGRESS: dict[str, list[tuple[float, str, str | None]]] = {
 
 _PHASE1_AGENTS = ("Log Scout", "Code Hunter", "Infra Scout", "Security Scout")
 _PHASE2_AGENTS = ("Root Cause", "Fix", "Verification")
-_FIXTURE_AGENT_SLEEP = 0.05
+_FIXTURE_AGENT_SLEEP = 0.8
 
 
 def _agent_result_from_fixture(agent_name: str, fixture: dict[str, Any]) -> AgentResult:
@@ -298,9 +299,13 @@ class InvestigationManager:
                 state = InvestigationState(**item)
             except Exception:  # noqa: BLE001
                 continue
-            if state.status == InvestigationStatus.RUNNING:
+            if state.status in (
+                InvestigationStatus.RUNNING,
+                InvestigationStatus.ROOT_CAUSE,
+                InvestigationStatus.FIX_PROPOSED,
+            ):
                 state.status = InvestigationStatus.FAILED
-                state.updated_at = datetime.utcnow()
+                state.updated_at = utcnow()
                 changed = True
             self._investigations[state.id] = state
             self._subscribers[state.id] = []
@@ -364,7 +369,7 @@ class InvestigationManager:
     def update_agent(self, inv_id: str, agent_name: str, result: AgentResult) -> None:
         state = self._investigations[inv_id]
         state.agents[agent_name] = result
-        state.updated_at = datetime.utcnow()
+        state.updated_at = utcnow()
         self._persist()
 
     def set_scenario(self, inv_id: str, scenario_id: str) -> None:
@@ -373,7 +378,7 @@ class InvestigationManager:
         if state is None:
             return
         state.scenario_id = scenario_id
-        state.updated_at = datetime.utcnow()
+        state.updated_at = utcnow()
         self._persist()
 
     # ------------------------------------------------------------------
@@ -428,7 +433,7 @@ class InvestigationManager:
     def _duration_ms(started_at: datetime | None, ended_at: datetime | None = None) -> int:
         if started_at is None:
             return 0
-        end = ended_at or datetime.utcnow()
+        end = ended_at or utcnow()
         return max(0, int((end - started_at).total_seconds() * 1000))
 
     def _publish_agent_progress(
@@ -508,7 +513,7 @@ class InvestigationManager:
         state.verification_checks = self._parse_verification_checks(
             payload.get("verification_checks")
         )
-        state.updated_at = datetime.utcnow()
+        state.updated_at = utcnow()
         self._persist()
 
     def _results_sse_payload(self, state: InvestigationState) -> dict[str, Any]:
@@ -529,7 +534,7 @@ class InvestigationManager:
             ],
         }
 
-    def _apply_fixture_results(
+    def _apply_fixture_root_cause(
         self, state: InvestigationState, fixture: dict[str, Any]
     ) -> None:
         scenario = fixture.get("scenario", {})
@@ -539,9 +544,20 @@ class InvestigationManager:
         state.confidence = root_evidence.get("confidence")
         state.severity = scenario.get("severity", "").lower() or None
         state.affected_component = scenario.get("affected_component")
+        state.updated_at = utcnow()
+        self._persist()
+
+    def _apply_fixture_fix(
+        self, state: InvestigationState, fixture: dict[str, Any]
+    ) -> None:
         state.fix_steps = list(fixture.get("expected_fix_steps") or [])
         state.proposed_fix = "; ".join(state.fix_steps) if state.fix_steps else None
+        state.updated_at = utcnow()
+        self._persist()
 
+    def _apply_fixture_verification(
+        self, state: InvestigationState, fixture: dict[str, Any]
+    ) -> None:
         checks = fixture.get("expected_verification", {}).get("checks", {})
         state.verification_checks = [
             VerificationCheck(
@@ -552,6 +568,7 @@ class InvestigationManager:
             for key, value in checks.items()
         ]
         state.verification_result = _verification_message(fixture)
+        state.updated_at = utcnow()
         self._persist()
 
     def _sentinel(self, inv_id: str) -> None:
@@ -614,7 +631,7 @@ class InvestigationManager:
         except Exception as exc:  # noqa: BLE001
             if state is not None:
                 state.status = InvestigationStatus.FAILED
-                state.updated_at = datetime.utcnow()
+                state.updated_at = utcnow()
                 self._publish(
                     inv_id,
                     "investigation_update",
@@ -631,7 +648,7 @@ class InvestigationManager:
     async def _run_with_real_agents(self, inv_id: str) -> None:
         state = self._investigations[inv_id]
         state.status = InvestigationStatus.RUNNING
-        state.updated_at = datetime.utcnow()
+        state.updated_at = utcnow()
         self._publish(inv_id, "investigation_update", {"status": "RUNNING", "message": "Investigation started"})
         self._add_timeline(state, "investigation_started", None, "Investigation started")
 
@@ -659,6 +676,49 @@ class InvestigationManager:
                 {"findings": agent_result.findings},
             )
 
+            if agent_result.status != AgentStatus.COMPLETE:
+                return
+            if agent_name == "Root Cause":
+                self._apply_results_payload(state, {
+                    "root_cause": agent_result.evidence.get("root_cause_summary"),
+                    "confidence": agent_result.evidence.get("confidence"),
+                    "severity": agent_result.evidence.get("severity"),
+                    "affected_component": agent_result.evidence.get("affected_component"),
+                    "contributing_evidence": agent_result.evidence.get("contributing_evidence", []),
+                })
+                state.status = InvestigationStatus.ROOT_CAUSE
+                state.updated_at = utcnow()
+                self._publish(inv_id, "investigation_update", {
+                    "status": InvestigationStatus.ROOT_CAUSE,
+                    **self._results_sse_payload(state),
+                })
+                self._add_timeline(state, "root_cause", None, f"Root cause: {state.root_cause}")
+            elif agent_name == "Fix":
+                self._apply_results_payload(state, {
+                    "proposed_fix": agent_result.findings[0] if agent_result.findings else None,
+                    "proposed_fix_diff": agent_result.evidence.get("proposed_fix_diff"),
+                    "fix_steps": agent_result.evidence.get("fix_steps", []),
+                })
+                state.status = InvestigationStatus.FIX_PROPOSED
+                state.updated_at = utcnow()
+                self._publish(inv_id, "investigation_update", {
+                    "status": InvestigationStatus.FIX_PROPOSED,
+                    **self._results_sse_payload(state),
+                })
+                self._add_timeline(state, "fix_proposed", None, f"Fix: {state.proposed_fix}")
+            elif agent_name == "Verification":
+                self._apply_results_payload(state, {
+                    "verification_verdict": agent_result.evidence.get("verdict"),
+                    "verification_checks": agent_result.evidence.get("verification_checks", []),
+                })
+                state.status = InvestigationStatus.COMPLETE
+                state.updated_at = utcnow()
+                self._publish(inv_id, "investigation_update", {
+                    "status": InvestigationStatus.COMPLETE,
+                    **self._results_sse_payload(state),
+                })
+                self._add_timeline(state, "complete", None, "Investigation complete")
+
         try:
             result = await orchestrator.run_investigation(
                 investigation_id=inv_id,
@@ -667,29 +727,15 @@ class InvestigationManager:
             )
             self._apply_results_payload(state, result)
             state.status = InvestigationStatus.COMPLETE
-            state.updated_at = datetime.utcnow()
+            state.updated_at = utcnow()
 
-            results_payload = self._results_sse_payload(state)
-            self._publish(inv_id, "investigation_update", {
-                "status": InvestigationStatus.ROOT_CAUSE,
-                **results_payload,
-            })
-            self._publish(inv_id, "investigation_update", {
-                "status": InvestigationStatus.FIX_PROPOSED,
-                **results_payload,
-            })
-            self._publish(inv_id, "investigation_update", {
-                "status": InvestigationStatus.COMPLETE,
-                **results_payload,
-            })
             self._publish(inv_id, "complete", {
                 "investigation_id": inv_id,
-                **results_payload,
+                **self._results_sse_payload(state),
             })
-            self._add_timeline(state, "complete", None, "Investigation complete")
         except Exception as exc:  # noqa: BLE001
             state.status = InvestigationStatus.FAILED
-            state.updated_at = datetime.utcnow()
+            state.updated_at = utcnow()
             self._publish(inv_id, "investigation_update", {"status": "FAILED", "error": str(exc)})
 
     # ------------------------------------------------------------------
@@ -704,7 +750,7 @@ class InvestigationManager:
         _ensure_fixture_agents(state, fixture)
         state.scenario_id = scenario_id
         state.status = InvestigationStatus.RUNNING
-        state.updated_at = datetime.utcnow()
+        state.updated_at = utcnow()
 
         self._publish(
             inv_id,
@@ -720,7 +766,7 @@ class InvestigationManager:
         # Phase 1 — parallel scouts
         for name in _PHASE1_AGENTS:
             state.agents[name].status = AgentStatus.RUNNING
-            state.agents[name].started_at = datetime.utcnow()
+            state.agents[name].started_at = utcnow()
             self._publish(
                 inv_id,
                 "agent_update",
@@ -737,7 +783,7 @@ class InvestigationManager:
         # Phase 2 — sequential synthesis agents
         for name in _PHASE2_AGENTS:
             state.agents[name].status = AgentStatus.RUNNING
-            state.agents[name].started_at = datetime.utcnow()
+            state.agents[name].started_at = utcnow()
             self._publish(
                 inv_id,
                 "agent_update",
@@ -746,41 +792,57 @@ class InvestigationManager:
             self._add_timeline(state, "agent_started", name, f"{name} started")
             await self._run_fixture_agent(inv_id, name, fixture)
 
-        state.root_cause = fixture["expected_root_cause_full"]
-        state.proposed_fix = "; ".join(fixture["expected_fix_steps"])
-        self._apply_fixture_results(state, fixture)
-        state.status = InvestigationStatus.COMPLETE
-        state.updated_at = datetime.utcnow()
+            if name == "Root Cause":
+                self._apply_fixture_root_cause(state, fixture)
+                state.status = InvestigationStatus.ROOT_CAUSE
+                state.updated_at = utcnow()
+                self._publish(
+                    inv_id,
+                    "investigation_update",
+                    {
+                        "status": InvestigationStatus.ROOT_CAUSE,
+                        **self._results_sse_payload(state),
+                    },
+                )
+                self._add_timeline(
+                    state, "root_cause", None, f"Root cause: {state.root_cause}"
+                )
+            elif name == "Fix":
+                self._apply_fixture_fix(state, fixture)
+                state.status = InvestigationStatus.FIX_PROPOSED
+                state.updated_at = utcnow()
+                self._publish(
+                    inv_id,
+                    "investigation_update",
+                    {
+                        "status": InvestigationStatus.FIX_PROPOSED,
+                        **self._results_sse_payload(state),
+                    },
+                )
+                self._add_timeline(
+                    state, "fix_proposed", None, f"Fix: {state.proposed_fix}"
+                )
+            elif name == "Verification":
+                self._apply_fixture_verification(state, fixture)
+                state.status = InvestigationStatus.COMPLETE
+                state.updated_at = utcnow()
+                self._publish(
+                    inv_id,
+                    "investigation_update",
+                    {
+                        "status": InvestigationStatus.COMPLETE,
+                        **self._results_sse_payload(state),
+                    },
+                )
+                self._add_timeline(state, "complete", None, "Investigation complete")
 
-        results_payload = self._results_sse_payload(state)
-        self._publish(
-            inv_id,
-            "investigation_update",
-            {"status": InvestigationStatus.ROOT_CAUSE, **results_payload},
-        )
-        self._publish(
-            inv_id,
-            "investigation_update",
-            {"status": InvestigationStatus.FIX_PROPOSED, **results_payload},
-        )
-        self._publish(
-            inv_id,
-            "investigation_update",
-            {
-                "status": InvestigationStatus.COMPLETE,
-                **results_payload,
-            },
-        )
-        self._add_timeline(state, "root_cause", None, f"Root cause: {state.root_cause}")
-        self._add_timeline(state, "fix_proposed", None, f"Fix: {state.proposed_fix}")
-        self._add_timeline(state, "complete", None, "Investigation complete")
         self._publish(
             inv_id,
             "complete",
             {
                 "investigation_id": inv_id,
                 "scenario_id": scenario_id,
-                **results_payload,
+                **self._results_sse_payload(state),
             },
         )
 
@@ -792,7 +854,7 @@ class InvestigationManager:
             await asyncio.sleep(_FIXTURE_AGENT_SLEEP)
             result = _agent_result_from_fixture(name, fixture)
             result.started_at = state.agents[name].started_at
-            result.completed_at = datetime.utcnow()
+            result.completed_at = utcnow()
             self.update_agent(inv_id, name, result)
             self._publish(
                 inv_id,
@@ -813,7 +875,7 @@ class InvestigationManager:
             )
         except Exception as exc:  # noqa: BLE001
             state.agents[name].status = AgentStatus.FAILED
-            state.agents[name].completed_at = datetime.utcnow()
+            state.agents[name].completed_at = utcnow()
             self._publish(
                 inv_id,
                 "agent_update",
@@ -827,14 +889,14 @@ class InvestigationManager:
     async def _run_with_stubs(self, inv_id: str) -> None:
         state = self._investigations[inv_id]
         state.status = InvestigationStatus.RUNNING
-        state.updated_at = datetime.utcnow()
+        state.updated_at = utcnow()
 
         self._publish(inv_id, "investigation_update", {"status": "RUNNING", "message": "Investigation started"})
         self._add_timeline(state, "investigation_started", None, "Investigation started")
 
         # Phase 1: parallel agents
         for name in _AGENT_STUBS:
-            started_at = datetime.utcnow()
+            started_at = utcnow()
             state.agents[name].status = AgentStatus.RUNNING
             state.agents[name].started_at = started_at
             self._publish_agent_progress(
@@ -866,6 +928,8 @@ class InvestigationManager:
             "status": InvestigationStatus.ROOT_CAUSE,
             **self._results_sse_payload(state),
         })
+        state.status = InvestigationStatus.ROOT_CAUSE
+        state.updated_at = utcnow()
         self._add_timeline(state, "root_cause", None, f"Root cause: {state.root_cause}")
 
         # Phase 3: fix
@@ -873,7 +937,8 @@ class InvestigationManager:
         state.proposed_fix = _DEMO_FIX
         state.proposed_fix_diff = _DEMO_FIX_DIFF
         state.fix_steps = list(_DEMO_FIX_STEPS)
-        state.updated_at = datetime.utcnow()
+        state.status = InvestigationStatus.FIX_PROPOSED
+        state.updated_at = utcnow()
         self._publish(inv_id, "investigation_update", {
             "status": InvestigationStatus.FIX_PROPOSED,
             **self._results_sse_payload(state),
@@ -887,7 +952,7 @@ class InvestigationManager:
             _DEMO_VERIFICATION_CHECKS
         )
         state.status = InvestigationStatus.COMPLETE
-        state.updated_at = datetime.utcnow()
+        state.updated_at = utcnow()
         self._publish(inv_id, "investigation_update", {
             "status": InvestigationStatus.COMPLETE,
             **self._results_sse_payload(state),
@@ -901,7 +966,7 @@ class InvestigationManager:
 
     async def _run_single_agent(self, inv_id: str, name: str, stub_fn: Any) -> None:
         state = self._investigations[inv_id]
-        started_at = state.agents[name].started_at or datetime.utcnow()
+        started_at = state.agents[name].started_at or utcnow()
         findings: list[str] = []
         try:
             stub_task = asyncio.create_task(stub_fn())
@@ -922,7 +987,7 @@ class InvestigationManager:
             result: AgentResult = await stub_task
             result.agent_name = name
             result.started_at = started_at
-            result.completed_at = datetime.utcnow()
+            result.completed_at = utcnow()
             self.update_agent(inv_id, name, result)
             self._publish_agent_progress(
                 inv_id,
@@ -941,7 +1006,7 @@ class InvestigationManager:
             )
         except Exception as exc:  # noqa: BLE001
             state.agents[name].status = AgentStatus.FAILED
-            state.agents[name].completed_at = datetime.utcnow()
+            state.agents[name].completed_at = utcnow()
             self._publish_agent_progress(
                 inv_id,
                 name,
@@ -966,7 +1031,7 @@ class InvestigationManager:
     ) -> None:
         state.timeline.append(
             TimelineEvent(
-                timestamp=datetime.utcnow(),
+                timestamp=utcnow(),
                 event_type=event_type,
                 agent=agent,
                 message=message,

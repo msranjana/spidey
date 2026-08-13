@@ -1,7 +1,7 @@
 """Spider-Sense demo scenario: API Database Connection Failure.
 
 All data is deterministic and hardcoded except for ``triggered_at``,
-which is set to ``datetime.utcnow()`` at import time so the scenario
+which is set to ``datetime.now(timezone.utc)`` at import time so the scenario
 always looks fresh.
 
 Usage::
@@ -53,7 +53,7 @@ SCENARIO: dict = {
         "847 requests failed in the last 5 minutes."
     ),
     "severity": "CRITICAL",
-    "triggered_at": datetime.utcnow().isoformat() + "Z",
+    "triggered_at": datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z"),
 
     # ------------------------------------------------------------------
     # 20-line log stream showing the failure building up over 5 minutes.

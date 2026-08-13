@@ -7,6 +7,7 @@ Start with:
 from __future__ import annotations
 
 import asyncio
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
@@ -46,9 +47,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Restrict cross-origin requests to the known Vite dev server(s). Override
+# via CORS_ORIGINS (comma-separated) if the frontend is served elsewhere.
+_DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
+_cors_origins = [
+    origin.strip()
+    for origin in os.environ.get("CORS_ORIGINS", _DEFAULT_CORS_ORIGINS).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # frontend at localhost:5173
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
