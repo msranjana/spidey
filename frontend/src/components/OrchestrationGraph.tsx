@@ -118,10 +118,9 @@ const STATUS_GLOW: Record<AgentStatus, string> = {
   [AgentStatus.FAILED]:   '#ef4444',
 };
 
-/** Resolve the name passed to onAgentClick / selectedAgent for a node. */
-function nodeAgentName(node: NodeDef): string {
-  return node.agentKey ?? node.label;
-}
+// ─────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────
 
 function nodeById(id: NodeId): NodeDef {
   return NODES.find(n => n.id === id)!;
@@ -423,7 +422,7 @@ export default function OrchestrationGraph({
   }
 
   const hoveredNode = hoveredAgent
-    ? NODES.find(n => nodeAgentName(n) === hoveredAgent)
+    ? NODES.find(n => n.agentKey === hoveredAgent)
     : null;
 
   // Stage-label x positions align with node column centers
@@ -437,7 +436,7 @@ export default function OrchestrationGraph({
 
   return (
     <div className="ograph-wrapper">
-      {hoveredNode && (
+      {hoveredNode && hoveredNode.agentKey && (
         <GraphTooltip
           label={hoveredNode.label}
           status={getNodeStatus(hoveredNode.id)}
@@ -488,9 +487,8 @@ export default function OrchestrationGraph({
 
         {/* ── Nodes ── */}
         {NODES.map(node => {
-          const agentName = nodeAgentName(node);
-          const isSelected = selectedAgent === agentName;
-          const hasClickHandler = onAgentClick !== undefined;
+          const isScout = node.agentKey !== null;
+          const isSelected = isScout && selectedAgent === node.agentKey;
 
           return (
             <GraphNode
@@ -498,12 +496,16 @@ export default function OrchestrationGraph({
               node={node}
               status={getNodeStatus(node.id)}
               isSelected={isSelected}
-              isClickable={hasClickHandler}
-              onClick={hasClickHandler
-                ? () => onAgentClick(agentName)
+              isClickable={isScout}
+              onClick={isScout && node.agentKey
+                ? () => onAgentClick?.(node.agentKey!)
                 : undefined}
-              onMouseEnter={() => setHoveredAgent(agentName)}
-              onMouseLeave={() => setHoveredAgent(null)}
+              onMouseEnter={isScout && node.agentKey
+                ? () => setHoveredAgent(node.agentKey!)
+                : undefined}
+              onMouseLeave={isScout
+                ? () => setHoveredAgent(null)
+                : undefined}
             />
           );
         })}
