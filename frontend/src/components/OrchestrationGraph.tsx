@@ -10,7 +10,7 @@
 
 import { useState, type KeyboardEvent } from 'react';
 import './OrchestrationGraph.css';
-import { AgentStatus } from '../types';
+import { AgentStatus, InvestigationStatus } from '../types';
 
 // ─────────────────────────────────────────────
 // Types
@@ -352,25 +352,25 @@ export default function OrchestrationGraph({
   function getNodeStatus(nodeId: NodeId): AgentStatus {
     switch (nodeId) {
       case 'orchestrator':
-        if (invStatus === 'COMPLETE')                        return AgentStatus.COMPLETE;
-        if (invStatus === '' || invStatus === 'PENDING')     return AgentStatus.IDLE;
+        if (invStatus === InvestigationStatus.COMPLETE)      return AgentStatus.COMPLETE;
+        if (invStatus === '' || invStatus === InvestigationStatus.PENDING) return AgentStatus.IDLE;
         return AgentStatus.RUNNING;
 
       case 'root_cause':
-        if (invStatus === 'fix_proposed' || invStatus === 'COMPLETE') return AgentStatus.COMPLETE;
-        if (invStatus === 'root_cause')                               return AgentStatus.RUNNING;
-        if (invStatus === 'RUNNING' && allScoutsDone(agentStates))    return AgentStatus.RUNNING;
+        if (invStatus === InvestigationStatus.FIX_PROPOSED || invStatus === InvestigationStatus.COMPLETE) return AgentStatus.COMPLETE;
+        if (invStatus === InvestigationStatus.ROOT_CAUSE)                                               return AgentStatus.RUNNING;
+        if (invStatus === InvestigationStatus.RUNNING && allScoutsDone(agentStates))                    return AgentStatus.RUNNING;
         return AgentStatus.IDLE;
 
       case 'fix_agent':
-        if (invStatus === 'COMPLETE')                        return AgentStatus.COMPLETE;
-        if (invStatus === 'fix_proposed')                    return AgentStatus.COMPLETE;
-        if (invStatus === 'root_cause')                      return AgentStatus.RUNNING;
+        if (invStatus === InvestigationStatus.COMPLETE)                   return AgentStatus.COMPLETE;
+        if (invStatus === InvestigationStatus.FIX_PROPOSED)               return AgentStatus.COMPLETE;
+        if (invStatus === InvestigationStatus.ROOT_CAUSE)                 return AgentStatus.RUNNING;
         return AgentStatus.IDLE;
 
       case 'verification':
-        if (invStatus === 'COMPLETE')                        return AgentStatus.COMPLETE;
-        if (invStatus === 'fix_proposed')                    return AgentStatus.RUNNING;
+        if (invStatus === InvestigationStatus.COMPLETE)      return AgentStatus.COMPLETE;
+        if (invStatus === InvestigationStatus.FIX_PROPOSED)  return AgentStatus.RUNNING;
         return AgentStatus.IDLE;
 
       default: {

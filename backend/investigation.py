@@ -275,6 +275,7 @@ class InvestigationManager:
     def __init__(self, data_file: str | os.PathLike[str] | None = None) -> None:
         self._investigations: dict[str, InvestigationState] = {}
         self._subscribers: dict[str, list[Queue[str | None]]] = {}
+        self._tasks: dict[str, asyncio.Task[Any]] = {}
         self._data_file = Path(data_file) if data_file is not None else _default_data_file()
         self._load()
 
@@ -561,16 +562,67 @@ class InvestigationManager:
     # Orchestration entry point
     # ------------------------------------------------------------------
 
+    def start(self, inv_id: str, scenario_id: str | None = None) -> None:
+        """Start the pipeline as a tracked background task.
+
+        Cancels any prior run for the same investigation before starting a
+        new one.  Tasks are tracked so they can be cancelled on shutdown.
+        """
+        self.cancel(inv_id)
+        task = asyncio.create_task(self.run_investigation(inv_id, scenario_id))
+        self._tasks[inv_id] = task
+        task.add_done_callback(self._on_task_done)
+
+    def _on_task_done(self, task: asyncio.Task[Any]) -> None:
+        """Remove a finished task from the registry (only if it is the current one)."""
+        for inv_id, current in list(self._tasks.items()):
+            if current is task:
+                self._tasks.pop(inv_id, None)
+                return
+
+    def cancel(self, inv_id: str) -> None:
+        """Cancel a tracked background task for an investigation, if any."""
+        task = self._tasks.pop(inv_id, None)
+        if task is not None and not task.done():
+            task.cancel()
+
+    async def cancel_all(self) -> None:
+        """Cancel all tracked background tasks (e.g. on shutdown)."""
+        tasks = list(self._tasks.values())
+        self._tasks.clear()
+        if not tasks:
+            return
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
     async def run_investigation(
         self, inv_id: str, scenario_id: str | None = None
     ) -> None:
         """Full investigation pipeline (runs as a background asyncio task)."""
-        if scenario_id is not None:
-            await self._run_with_fixture(inv_id, scenario_id)
-        elif _ORCHESTRATOR_AVAILABLE:
-            await self._run_with_real_agents(inv_id)
-        else:
-            await self._run_with_stubs(inv_id)
+        state = self._investigations.get(inv_id)
+        try:
+            if scenario_id is not None:
+                await self._run_with_fixture(inv_id, scenario_id)
+            elif _ORCHESTRATOR_AVAILABLE:
+                await self._run_with_real_agents(inv_id)
+            else:
+                await self._run_with_stubs(inv_id)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            if state is not None:
+                state.status = InvestigationStatus.FAILED
+                state.updated_at = datetime.utcnow()
+                self._publish(
+                    inv_id,
+                    "investigation_update",
+                    {"status": InvestigationStatus.FAILED, "error": str(exc)},
+                )
+        finally:
+            self._persist()
+            self._sentinel(inv_id)
 
     # ------------------------------------------------------------------
     # Real-agent pipeline
@@ -619,11 +671,11 @@ class InvestigationManager:
 
             results_payload = self._results_sse_payload(state)
             self._publish(inv_id, "investigation_update", {
-                "status": "root_cause",
+                "status": InvestigationStatus.ROOT_CAUSE,
                 **results_payload,
             })
             self._publish(inv_id, "investigation_update", {
-                "status": "fix_proposed",
+                "status": InvestigationStatus.FIX_PROPOSED,
                 **results_payload,
             })
             self._publish(inv_id, "investigation_update", {
@@ -639,9 +691,6 @@ class InvestigationManager:
             state.status = InvestigationStatus.FAILED
             state.updated_at = datetime.utcnow()
             self._publish(inv_id, "investigation_update", {"status": "FAILED", "error": str(exc)})
-        finally:
-            self._persist()
-            self._sentinel(inv_id)
 
     # ------------------------------------------------------------------
     # Fixture-driven pipeline (used by run-demo with scenario_id)
@@ -707,12 +756,12 @@ class InvestigationManager:
         self._publish(
             inv_id,
             "investigation_update",
-            {"status": "root_cause", **results_payload},
+            {"status": InvestigationStatus.ROOT_CAUSE, **results_payload},
         )
         self._publish(
             inv_id,
             "investigation_update",
-            {"status": "fix_proposed", **results_payload},
+            {"status": InvestigationStatus.FIX_PROPOSED, **results_payload},
         )
         self._publish(
             inv_id,
@@ -734,8 +783,6 @@ class InvestigationManager:
                 **results_payload,
             },
         )
-        self._persist()
-        self._sentinel(inv_id)
 
     async def _run_fixture_agent(
         self, inv_id: str, name: str, fixture: dict[str, Any]
@@ -816,7 +863,7 @@ class InvestigationManager:
             "contributing_evidence": _DEMO_CONTRIBUTING_EVIDENCE,
         })
         self._publish(inv_id, "investigation_update", {
-            "status": "root_cause",
+            "status": InvestigationStatus.ROOT_CAUSE,
             **self._results_sse_payload(state),
         })
         self._add_timeline(state, "root_cause", None, f"Root cause: {state.root_cause}")
@@ -828,7 +875,7 @@ class InvestigationManager:
         state.fix_steps = list(_DEMO_FIX_STEPS)
         state.updated_at = datetime.utcnow()
         self._publish(inv_id, "investigation_update", {
-            "status": "fix_proposed",
+            "status": InvestigationStatus.FIX_PROPOSED,
             **self._results_sse_payload(state),
         })
         self._add_timeline(state, "fix_proposed", None, f"Fix: {state.proposed_fix}")
@@ -851,8 +898,6 @@ class InvestigationManager:
             "investigation_id": inv_id,
             **self._results_sse_payload(state),
         })
-        self._persist()
-        self._sentinel(inv_id)
 
     async def _run_single_agent(self, inv_id: str, name: str, stub_fn: Any) -> None:
         state = self._investigations[inv_id]

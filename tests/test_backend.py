@@ -29,6 +29,9 @@ from models import AgentStatus, InvestigationStatus
 
 @pytest.fixture()
 def client() -> TestClient:
+    for _task in list(manager._tasks.values()):
+        _task.cancel()
+    manager._tasks.clear()
     manager._investigations.clear()
     manager._subscribers.clear()
     with TestClient(app) as test_client:

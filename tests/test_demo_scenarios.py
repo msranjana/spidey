@@ -84,6 +84,9 @@ class TestRunDemoScenarioParam:
             sys.path.insert(0, str(backend))
         from main import app, manager
 
+        for _task in list(manager._tasks.values()):
+            _task.cancel()
+        manager._tasks.clear()
         manager._investigations.clear()
         manager._subscribers.clear()
         with TestClient(app) as test_client:

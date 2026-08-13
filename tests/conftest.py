@@ -67,6 +67,9 @@ def client(app):
     """Return a fresh synchronous TestClient for each test."""
     from main import manager
 
+    for _task in list(manager._tasks.values()):
+        _task.cancel()
+    manager._tasks.clear()
     manager._investigations.clear()
     manager._subscribers.clear()
     with TestClient(app) as test_client:

@@ -19,6 +19,8 @@ class AgentStatus(str, enum.Enum):
 class InvestigationStatus(str, enum.Enum):
     PENDING = "PENDING"
     RUNNING = "RUNNING"
+    ROOT_CAUSE = "root_cause"
+    FIX_PROPOSED = "fix_proposed"
     COMPLETE = "COMPLETE"
     FAILED = "FAILED"
 

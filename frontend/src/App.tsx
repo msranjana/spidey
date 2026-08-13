@@ -62,22 +62,26 @@ function initialAgents(): Record<string, AgentResult> {
 
 function investigationStatusLabel(status: string): string {
   switch (status) {
-    case 'PENDING':      return 'Pending';
-    case 'RUNNING':      return 'Running…';
-    case 'root_cause':   return 'Identifying root cause…';
-    case 'fix_proposed': return 'Applying fix…';
-    case 'COMPLETE':     return 'Complete';
-    case 'FAILED':       return 'Failed';
-    default:             return '';
+    case InvestigationStatus.PENDING:      return 'Pending';
+    case InvestigationStatus.RUNNING:      return 'Running…';
+    case InvestigationStatus.ROOT_CAUSE:   return 'Identifying root cause…';
+    case InvestigationStatus.FIX_PROPOSED: return 'Applying fix…';
+    case InvestigationStatus.COMPLETE:     return 'Complete';
+    case InvestigationStatus.FAILED:       return 'Failed';
+    default:                               return '';
   }
 }
 
 function statusDotClass(status: string): string {
-  if (status === 'RUNNING' || status === 'root_cause' || status === 'fix_proposed') {
+  if (
+    status === InvestigationStatus.RUNNING ||
+    status === InvestigationStatus.ROOT_CAUSE ||
+    status === InvestigationStatus.FIX_PROPOSED
+  ) {
     return 'status-dot status-dot--running';
   }
-  if (status === 'COMPLETE') return 'status-dot status-dot--complete';
-  if (status === 'FAILED')   return 'status-dot status-dot--failed';
+  if (status === InvestigationStatus.COMPLETE) return 'status-dot status-dot--complete';
+  if (status === InvestigationStatus.FAILED)   return 'status-dot status-dot--failed';
   return 'status-dot';
 }
 
@@ -95,9 +99,9 @@ export default function App() {
   const [showIncidentInput, setShowIncidentInput] = useState(false);
   const esRef = useRef<EventSource | null>(null);
 
-  const isActive = investigationStatus === 'RUNNING'
-    || investigationStatus === 'root_cause'
-    || investigationStatus === 'fix_proposed';
+  const isActive = investigationStatus === InvestigationStatus.RUNNING
+    || investigationStatus === InvestigationStatus.ROOT_CAUSE
+    || investigationStatus === InvestigationStatus.FIX_PROPOSED;
 
   useEffect(() => {
     listDemoScenarios()
@@ -236,8 +240,8 @@ export default function App() {
         verification_checks: state.verification_checks ?? [],
       });
       if (state.status === InvestigationStatus.RUNNING
-        || state.status === ('root_cause' as InvestigationStatus)
-        || state.status === ('fix_proposed' as InvestigationStatus)) {
+        || state.status === InvestigationStatus.ROOT_CAUSE
+        || state.status === InvestigationStatus.FIX_PROPOSED) {
         connectSSE(invId);
       }
     } catch (err) {

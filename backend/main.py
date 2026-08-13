@@ -34,6 +34,9 @@ manager = InvestigationManager()
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ANN001
     yield
+    # Cancel any in-flight investigations on shutdown so they are not
+    # silently dropped mid-run.
+    await manager.cancel_all()
 
 
 app = FastAPI(
@@ -109,7 +112,7 @@ async def start_investigation(inv_id: str) -> dict:
     state = manager.get(inv_id)
     if state is None:
         raise HTTPException(status_code=404, detail="Investigation not found")
-    asyncio.create_task(manager.run_investigation(inv_id))
+    manager.start(inv_id)
     return {"investigation_id": inv_id, "message": "Investigation started"}
 
 
@@ -148,7 +151,7 @@ async def run_demo(inv_id: str, scenario_id: str | None = None) -> dict:
         ) from None
 
     manager.set_scenario(inv_id, resolved_id)
-    asyncio.create_task(manager.run_investigation(inv_id, scenario_id=resolved_id))
+    manager.start(inv_id, scenario_id=resolved_id)
     return {
         "investigation_id": inv_id,
         "scenario_id": resolved_id,
