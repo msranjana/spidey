@@ -180,11 +180,11 @@ export default function IncidentInput({
 
         <div className="incident-input__actions">
           <button type="submit" className="btn-run" disabled={isBusy} aria-busy={isSubmitting}>
-            {isSubmitting ? '⏳ Starting…' : '▶ Start Investigation'}
+            {isSubmitting ? 'Starting…' : 'Start Investigation'}
           </button>
           {error && (
             <span className="incident-input__error" role="alert">
-              ⚠ {error}
+              {error}
             </span>
           )}
         </div>

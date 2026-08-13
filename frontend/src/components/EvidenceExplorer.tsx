@@ -42,13 +42,13 @@ interface TabMeta {
 // ─────────────────────────────────────────────
 
 const AGENT_ICONS: Record<string, string> = {
-  'Log Scout':      '📋',
-  'Code Hunter':    '🔍',
-  'Infra Scout':    '🏗️',
-  'Security Scout': '🔒',
-  'Root Cause':     '🧠',
-  'Fix':            '🔧',
-  'Verification':   '✅',
+  'Log Scout':      'LS',
+  'Code Hunter':    'CH',
+  'Infra Scout':    'IS',
+  'Security Scout': 'SS',
+  'Root Cause':     'RC',
+  'Fix':            'FX',
+  'Verification':   'VF',
 };
 
 const AGENT_DEFAULT_TAB: Record<string, EvidenceTab> = {
@@ -762,7 +762,7 @@ export default function EvidenceExplorer({
   const evidenceEntries = Object.entries(evidence);
   const scalarEntries = evidenceEntries.filter(([, v]) => isScalar(v));
   const complexEntries = evidenceEntries.filter(([, v]) => !isScalar(v));
-  const icon = AGENT_ICONS[agentName] ?? '🤖';
+  const icon = AGENT_ICONS[agentName] ?? 'AG';
 
   const logLines = useMemo(() => {
     const fromEvidence = asLogLines(evidence.log_lines);

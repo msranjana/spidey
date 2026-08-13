@@ -203,7 +203,7 @@ export default function InvestigationHistory({
                   aria-label={`Reopen ${inv.title}`}
                   title="Reopen investigation"
                 >
-                  ↗
+                  Open
                 </button>
               </li>
             );

@@ -2,10 +2,10 @@ import { AgentStatus, type AgentResult } from '../types';
 import './AgentCard.css';
 
 export const AGENT_ICONS: Record<string, string> = {
-  'Log Scout': '📋',
-  'Code Hunter': '🔍',
-  'Infra Scout': '🏗️',
-  'Security Scout': '🔒',
+  'Log Scout': 'LS',
+  'Code Hunter': 'CH',
+  'Infra Scout': 'IS',
+  'Security Scout': 'SS',
 };
 
 export interface AgentCardProps {
@@ -50,7 +50,7 @@ export default function AgentCard({ name, agent }: AgentCardProps) {
     >
       <div className="agent-card__header">
         <div className="agent-card__icon" aria-hidden="true">
-          {AGENT_ICONS[name] ?? '🤖'}
+          {AGENT_ICONS[name] ?? 'AG'}
         </div>
         <div className="agent-card__title">
           <span className="agent-card__name">{name}</span>

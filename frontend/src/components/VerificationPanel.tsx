@@ -14,7 +14,7 @@ function checkIcon(status: string): { symbol: string; className: string } {
   if (normalized === 'fail' || normalized === 'failed') {
     return { symbol: '✗', className: 'verification-check__icon--fail' };
   }
-  return { symbol: '⚠', className: 'verification-check__icon--warn' };
+  return { symbol: '!', className: 'verification-check__icon--warn' };
 }
 
 export default function VerificationPanel({
