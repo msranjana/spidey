@@ -1,4 +1,8 @@
-import type { InvestigationState, StartInvestigationResponse } from './types';
+import type {
+  InvestigationState,
+  InvestigationSummary,
+  StartInvestigationResponse,
+} from './types';
 
 const BASE_URL = 'http://localhost:8000';
 
@@ -12,6 +16,14 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     throw new Error(`HTTP ${res.status}: ${text}`);
   }
   return res.json() as Promise<T>;
+}
+
+/**
+ * List all investigations (newest first).
+ * GET /api/investigations
+ */
+export function listInvestigations(): Promise<InvestigationSummary[]> {
+  return request<InvestigationSummary[]>('/api/investigations');
 }
 
 /**

@@ -64,6 +64,43 @@ def test_start_investigation_custom_title(client: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
+# GET /api/investigations
+# ---------------------------------------------------------------------------
+
+
+def test_list_investigations_empty(client: TestClient) -> None:
+    resp = client.get("/api/investigations")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_list_investigations_returns_summaries(client: TestClient) -> None:
+    create_resp = client.post("/api/investigations", json={"title": "First"})
+    inv_id = create_resp.json()["investigation_id"]
+
+    resp = client.get("/api/investigations")
+    assert resp.status_code == 200
+    items = resp.json()
+    assert len(items) >= 1
+
+    match = next(item for item in items if item["id"] == inv_id)
+    assert match["title"] == "First"
+    assert match["status"] in {InvestigationStatus.PENDING, InvestigationStatus.RUNNING}
+    assert "created_at" in match
+    assert "updated_at" in match
+
+
+def test_list_investigations_newest_first(client: TestClient) -> None:
+    first = client.post("/api/investigations", json={"title": "Older"})
+    second = client.post("/api/investigations", json={"title": "Newer"})
+
+    resp = client.get("/api/investigations")
+    items = resp.json()
+    ids = [item["id"] for item in items]
+    assert ids.index(second.json()["investigation_id"]) < ids.index(first.json()["investigation_id"])
+
+
+# ---------------------------------------------------------------------------
 # GET /api/investigations/{id}
 # ---------------------------------------------------------------------------
 
@@ -149,6 +186,18 @@ def test_manager_create_and_get() -> None:
 def test_manager_get_missing() -> None:
     m = manager
     assert m.get("does-not-exist") is None
+
+
+def test_manager_list() -> None:
+    from datetime import timedelta
+
+    m = manager
+    first = m.create("List test A")
+    second = m.create("List test B")
+    second.created_at = first.created_at + timedelta(seconds=1)
+    items = m.list()
+    ids = [item.id for item in items]
+    assert ids.index(second.id) < ids.index(first.id)
 
 
 def test_manager_update_agent() -> None:
