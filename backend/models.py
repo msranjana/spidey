@@ -30,6 +30,11 @@ class AgentResult(BaseModel):
     evidence: dict[str, Any] = Field(default_factory=dict)
     started_at: datetime | None = None
     completed_at: datetime | None = None
+    error: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialise to a plain JSON-friendly dict."""
+        return self.model_dump(mode="json")
 
 
 class TimelineEvent(BaseModel):

@@ -1,45 +1,23 @@
-"""Data models for Spider-Sense agents.
+"""Shared agent data models.
 
-Pure stdlib — no external dependencies required.
+Re-exports the canonical Pydantic models defined in ``backend/models.py`` so
+the agents package and the backend use one single set of types (no drift, no
+manual conversion).
+
+The backend directory is placed on ``sys.path`` (mirroring the strategy used
+by ``backend/investigation.py``) so ``import models`` resolves to
+``backend/models.py`` regardless of how this package is imported.
 """
 
 from __future__ import annotations
 
-import enum
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Any
+import sys
+from pathlib import Path
 
+_BACKEND_DIR = str(Path(__file__).resolve().parent.parent / "backend")
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
 
-class AgentStatus(str, enum.Enum):
-    """Lifecycle states for an agent run."""
+from models import AgentResult, AgentStatus  # noqa: E402
 
-    IDLE = "IDLE"
-    RUNNING = "RUNNING"
-    COMPLETE = "COMPLETE"
-    FAILED = "FAILED"
-
-
-@dataclass
-class AgentResult:
-    """Result produced by a single agent."""
-
-    agent_name: str
-    status: AgentStatus = AgentStatus.IDLE
-    findings: list[str] = field(default_factory=list)
-    evidence: dict[str, Any] = field(default_factory=dict)
-    started_at: datetime | None = None
-    completed_at: datetime | None = None
-    error: str | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        """Serialise to a plain dict (JSON-friendly)."""
-        return {
-            "agent_name": self.agent_name,
-            "status": self.status.value,
-            "findings": self.findings,
-            "evidence": self.evidence,
-            "started_at": self.started_at.isoformat() if self.started_at else None,
-            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
-            "error": self.error,
-        }
+__all__ = ["AgentResult", "AgentStatus"]

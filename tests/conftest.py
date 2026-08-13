@@ -2,8 +2,16 @@
 
 from __future__ import annotations
 
+import os
 import sys
+import tempfile
 from pathlib import Path
+
+# ---------------------------------------------------------------------------
+# Isolate persistence from any real dev data file before `main` is imported.
+# ---------------------------------------------------------------------------
+_TMP_DATA_DIR = tempfile.mkdtemp(prefix="spidy-test-")
+os.environ["SPIDY_DATA_FILE"] = os.path.join(_TMP_DATA_DIR, "investigations.json")
 
 # ---------------------------------------------------------------------------
 # Ensure repo root and backend dir are importable from any CWD.

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 import uuid
 from asyncio import Queue
@@ -33,7 +34,9 @@ for _p in (_PROJECT_ROOT, _BACKEND_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-# backend/models must be imported before anything that might pull agents.models
+# backend/models must be imported before anything that might pull agents.
+# agents/models re-exports these same canonical models, so there is exactly
+# one definition of AgentResult / AgentStatus across the codebase.
 from models import (  # noqa: E402
     AgentResult,
     AgentStatus,
@@ -240,16 +243,79 @@ def _ensure_fixture_agents(state: InvestigationState, fixture: dict[str, Any]) -
 
 
 # ---------------------------------------------------------------------------
+# Persistence
+# ---------------------------------------------------------------------------
+
+
+def _default_data_file() -> Path:
+    """Resolve the investigations store path.
+
+    Override with the ``SPIDY_DATA_FILE`` environment variable; defaults to
+    ``backend/data/investigations.json``.
+    """
+    env = os.environ.get("SPIDY_DATA_FILE")
+    if env:
+        return Path(env)
+    return Path(__file__).resolve().parent / "data" / "investigations.json"
+
+
+# ---------------------------------------------------------------------------
 # InvestigationManager
 # ---------------------------------------------------------------------------
 
 
 class InvestigationManager:
-    """Holds in-memory investigations and orchestrates agent execution."""
+    """Holds investigations and orchestrates agent execution.
 
-    def __init__(self) -> None:
+    State is persisted to a JSON file (see ``_default_data_file``) so history
+    survives backend restarts.  Runs interrupted by a restart are reloaded in
+    ``FAILED`` state.
+    """
+
+    def __init__(self, data_file: str | os.PathLike[str] | None = None) -> None:
         self._investigations: dict[str, InvestigationState] = {}
         self._subscribers: dict[str, list[Queue[str | None]]] = {}
+        self._data_file = Path(data_file) if data_file is not None else _default_data_file()
+        self._load()
+
+    # ------------------------------------------------------------------
+    # Persistence
+    # ------------------------------------------------------------------
+
+    def _load(self) -> None:
+        """Load investigations from the JSON store, if it exists."""
+        if not self._data_file.exists():
+            return
+        try:
+            raw = self._data_file.read_text(encoding="utf-8")
+            data = json.loads(raw)
+        except (OSError, ValueError, json.JSONDecodeError):
+            return
+        changed = False
+        for item in data:
+            try:
+                state = InvestigationState(**item)
+            except Exception:  # noqa: BLE001
+                continue
+            if state.status == InvestigationStatus.RUNNING:
+                state.status = InvestigationStatus.FAILED
+                state.updated_at = datetime.utcnow()
+                changed = True
+            self._investigations[state.id] = state
+            self._subscribers[state.id] = []
+        if changed:
+            self._persist()
+
+    def _persist(self) -> None:
+        """Atomically write all investigations to the JSON store."""
+        try:
+            self._data_file.parent.mkdir(parents=True, exist_ok=True)
+            payload = [state.model_dump(mode="json") for state in self._investigations.values()]
+            tmp = self._data_file.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            tmp.replace(self._data_file)
+        except OSError:
+            pass
 
     # ------------------------------------------------------------------
     # Public CRUD
@@ -280,6 +346,7 @@ class InvestigationManager:
         )
         self._investigations[inv_id] = state
         self._subscribers[inv_id] = []
+        self._persist()
         return state
 
     def get(self, inv_id: str) -> InvestigationState | None:
@@ -297,6 +364,16 @@ class InvestigationManager:
         state = self._investigations[inv_id]
         state.agents[agent_name] = result
         state.updated_at = datetime.utcnow()
+        self._persist()
+
+    def set_scenario(self, inv_id: str, scenario_id: str) -> None:
+        """Record the demo scenario for an investigation and persist it."""
+        state = self._investigations.get(inv_id)
+        if state is None:
+            return
+        state.scenario_id = scenario_id
+        state.updated_at = datetime.utcnow()
+        self._persist()
 
     # ------------------------------------------------------------------
     # SSE subscription
@@ -431,6 +508,7 @@ class InvestigationManager:
             payload.get("verification_checks")
         )
         state.updated_at = datetime.utcnow()
+        self._persist()
 
     def _results_sse_payload(self, state: InvestigationState) -> dict[str, Any]:
         return {
@@ -450,8 +528,9 @@ class InvestigationManager:
             ],
         }
 
-    @staticmethod
-    def _apply_fixture_results(state: InvestigationState, fixture: dict[str, Any]) -> None:
+    def _apply_fixture_results(
+        self, state: InvestigationState, fixture: dict[str, Any]
+    ) -> None:
         scenario = fixture.get("scenario", {})
         root_cause_agent = fixture.get("expected_agents", {}).get("Root Cause", {})
         root_evidence = root_cause_agent.get("evidence", {})
@@ -472,6 +551,7 @@ class InvestigationManager:
             for key, value in checks.items()
         ]
         state.verification_result = _verification_message(fixture)
+        self._persist()
 
     def _sentinel(self, inv_id: str) -> None:
         for q in self._subscribers.get(inv_id, []):
@@ -505,33 +585,26 @@ class InvestigationManager:
 
         orchestrator = _AgentOrchestrator()
 
-        async def _on_update(agent_name: str, agent_result: Any) -> None:
-            # Convert agents.models.AgentResult → backend.models.AgentResult
-            pydantic_result = AgentResult(
-                agent_name=agent_result.agent_name,
-                status=AgentStatus(agent_result.status.value),
-                findings=agent_result.findings,
-                evidence=agent_result.evidence,
-                started_at=agent_result.started_at,
-                completed_at=agent_result.completed_at,
-            )
-            self.update_agent(inv_id, agent_name, pydantic_result)
+        async def _on_update(agent_name: str, agent_result: AgentResult) -> None:
+            # agent_result is already a backend.models.AgentResult (the agents
+            # package re-exports the canonical model), so store it directly.
+            self.update_agent(inv_id, agent_name, agent_result)
             self._publish_agent_progress(
                 inv_id,
                 agent_name,
-                pydantic_result.status,
-                pydantic_result.findings,
+                agent_result.status,
+                agent_result.findings,
                 None,
-                pydantic_result.started_at,
-                evidence=pydantic_result.evidence,
-                ended_at=pydantic_result.completed_at,
+                agent_result.started_at,
+                evidence=agent_result.evidence,
+                ended_at=agent_result.completed_at,
             )
             self._add_timeline(
                 state,
                 "agent_complete",
                 agent_name,
                 f"{agent_name} complete",
-                {"findings": pydantic_result.findings},
+                {"findings": agent_result.findings},
             )
 
         try:
@@ -567,6 +640,7 @@ class InvestigationManager:
             state.updated_at = datetime.utcnow()
             self._publish(inv_id, "investigation_update", {"status": "FAILED", "error": str(exc)})
         finally:
+            self._persist()
             self._sentinel(inv_id)
 
     # ------------------------------------------------------------------
@@ -660,6 +734,7 @@ class InvestigationManager:
                 **results_payload,
             },
         )
+        self._persist()
         self._sentinel(inv_id)
 
     async def _run_fixture_agent(
@@ -776,6 +851,7 @@ class InvestigationManager:
             "investigation_id": inv_id,
             **self._results_sse_payload(state),
         })
+        self._persist()
         self._sentinel(inv_id)
 
     async def _run_single_agent(self, inv_id: str, name: str, stub_fn: Any) -> None:

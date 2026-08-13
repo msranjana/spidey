@@ -147,7 +147,7 @@ async def run_demo(inv_id: str, scenario_id: str | None = None) -> dict:
             detail=f"Unknown scenario_id: {scenario_id}",
         ) from None
 
-    state.scenario_id = resolved_id
+    manager.set_scenario(inv_id, resolved_id)
     asyncio.create_task(manager.run_investigation(inv_id, scenario_id=resolved_id))
     return {
         "investigation_id": inv_id,
