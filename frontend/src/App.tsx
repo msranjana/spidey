@@ -3,6 +3,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import './index.css';
 import './App.css';
 import OrchestrationGraph from './components/OrchestrationGraph';
 import AgentCard from './components/AgentCard';
@@ -284,19 +285,41 @@ export default function App() {
   const statusLabel = investigationStatusLabel(investigationStatus);
   const selectedAgentData = selectedAgent ? agents[selectedAgent] : null;
 
-  const buttonLabel = isStarting ? '⏳ Starting…'
-    : isActive ? '⚡ Running…'
-    : isResolved ? '🔄 Run Again'
-    : '▶ Run Demo';
+  const buttonLabel = isStarting ? 'Starting…'
+    : isActive ? 'Running…'
+    : isResolved ? 'Run Again'
+    : 'Run Demo';
 
   return (
     <div className="app">
       <header className="app-header">
-        <span className="app-header__spider" aria-hidden="true">🕷️</span>
-        <h1 className="app-header__title">
-          Spider<span>-Sense</span>
-        </h1>
+        <div className="app-header__logo" aria-hidden="true">
+          <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="10" cy="10" r="2.25" fill="currentColor" />
+            <path
+              d="M10 2v3M10 15v3M2 10h3M15 10h3M4.22 4.22l2.12 2.12M13.66 13.66l2.12 2.12M4.22 15.78l2.12-2.12M13.66 6.34l2.12-2.12"
+              stroke="currentColor"
+              strokeWidth="1.25"
+              strokeLinecap="round"
+            />
+            <path
+              d="M6.5 6.5c2-1.5 5-1.5 7 0M6.5 13.5c2 1.5 5 1.5 7 0"
+              stroke="currentColor"
+              strokeWidth="1.1"
+              strokeLinecap="round"
+            />
+          </svg>
+        </div>
+        <div className="app-header__brand">
+          <h1 className="app-header__title">
+            Spider<span>-Sense</span>
+          </h1>
+        </div>
+        <span className="app-header__divider" aria-hidden="true" />
         <span className="app-header__subtitle">Agentic Incident Response</span>
+        <div className="app-header__meta">
+          <span className="app-header__badge">v3</span>
+        </div>
       </header>
 
       <div className="app-shell">
@@ -333,7 +356,7 @@ export default function App() {
               onClick={() => setShowIncidentInput(v => !v)}
               disabled={isActive || isStarting}
             >
-              {showIncidentInput ? 'Hide Incident Form' : '📝 Custom Incident'}
+              {showIncidentInput ? 'Hide Incident Form' : 'Custom Incident'}
             </button>
 
             {statusLabel && (
@@ -344,7 +367,7 @@ export default function App() {
             )}
 
             {error && (
-              <span className="control-bar__error" role="alert">⚠ {error}</span>
+              <span className="control-bar__error" role="alert">{error}</span>
             )}
           </div>
 
@@ -401,7 +424,7 @@ export default function App() {
 
           {isResolved && (
             <div className="resolved-banner" role="status">
-              <span className="resolved-banner__icon" aria-hidden="true">✅</span>
+              <span className="resolved-banner__icon" aria-hidden="true" />
               <div>
                 <div className="resolved-banner__title">Incident Resolved</div>
                 <div className="resolved-banner__sub">
