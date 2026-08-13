@@ -82,8 +82,10 @@ class TestRunDemoScenarioParam:
         backend = _ROOT / "backend"
         if str(backend) not in sys.path:
             sys.path.insert(0, str(backend))
-        from main import app
+        from main import app, manager
 
+        manager._investigations.clear()
+        manager._subscribers.clear()
         with TestClient(app) as test_client:
             yield test_client
 

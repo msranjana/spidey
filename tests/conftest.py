@@ -57,6 +57,10 @@ def app():
 @pytest.fixture()
 def client(app):
     """Return a fresh synchronous TestClient for each test."""
+    from main import manager
+
+    manager._investigations.clear()
+    manager._subscribers.clear()
     with TestClient(app) as test_client:
         yield test_client
 

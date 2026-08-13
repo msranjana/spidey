@@ -29,6 +29,8 @@ from models import AgentStatus, InvestigationStatus
 
 @pytest.fixture()
 def client() -> TestClient:
+    manager._investigations.clear()
+    manager._subscribers.clear()
     with TestClient(app) as test_client:
         yield test_client
 
